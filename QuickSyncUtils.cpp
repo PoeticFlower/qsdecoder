@@ -161,7 +161,7 @@ void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID)
     THREADNAME_INFO info;
     info.dwType = 0x1000;
     info.szName = szThreadName;
-    info.dwThreadID = -1;
+    info.dwThreadID = (DWORD)-1;
     info.dwFlags = 0;
 
     __try

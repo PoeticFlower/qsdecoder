@@ -62,8 +62,9 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     m_pFrameAllocator(NULL),
     m_mfxImpl(MFX_IMPL_UNSUPPORTED),
     m_pVideoParams(0),
-    m_pd3dDeviceManager(NULL),
-    m_pd3dDevice(NULL)
+    m_pRendererD2dDeviceManager(NULL),
+    m_pD3dDeviceManager(NULL),
+    m_pD3dDevice(NULL)
 {
     MSDK_ZERO_VAR(m_AllocResponse);
 
@@ -78,11 +79,11 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     if (MFX_ERR_NONE != sts)
         return;
 
-    //m_mfxVideoSession.SetPriority(MFX_PRIORITY_LOW);
     m_mfxVideoSession.QueryIMPL(&m_mfxImpl);
     m_mfxVideoSession.QueryVersion(&m_ApiVersion);
 
     m_bHwAcceleration = m_mfxImpl != MFX_IMPL_SOFTWARE;
+    m_bUseD3DAlloc = m_bHwAcceleration;
     m_pmfxDEC = new MFXVideoDECODE(m_mfxVideoSession);
 }
 
@@ -136,7 +137,7 @@ mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
 
 mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfxU32 nPitch)
 {
-    // already initializerd
+    // Already initialized
     if (m_pFrameSurfaces)
     {
         return MFX_ERR_NONE;
@@ -147,6 +148,7 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
 
     // Initialize frame allocator (if needed)
     sts = CreateAllocator();
+    MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, sts);
     MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, MFX_ERR_MEMORY_ALLOC);
    
     // Find how many surfaces are needed
@@ -155,14 +157,14 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
     sts = m_pmfxDEC->QueryIOSurf(pVideoParams, &allocRequest);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
-    allocRequest.NumFrameSuggested = (mfxU16)m_Config.dwOutputQueueLength + allocRequest.NumFrameSuggested + 1;
+    allocRequest.NumFrameSuggested = (mfxU16)m_Config.nOutputQueueLength + allocRequest.NumFrameSuggested + 1;
     allocRequest.NumFrameMin = allocRequest.NumFrameSuggested;
     MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
 
     // decide memory type
     allocRequest.Type = MFX_MEMTYPE_EXTERNAL_FRAME | MFX_MEMTYPE_FROM_DECODE;
-    allocRequest.Type |= (MFX_IMPL_SOFTWARE == m_mfxImpl) ?
-        MFX_MEMTYPE_SYSTEM_MEMORY : MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET;
+    allocRequest.Type |= (m_bUseD3DAlloc) ?
+       MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET : MFX_MEMTYPE_SYSTEM_MEMORY;
 
     memcpy(&allocRequest.Info, &pVideoParams->mfx.FrameInfo, sizeof(mfxFrameInfo));
 
@@ -215,6 +217,10 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     
     mfxStatus sts = MFX_ERR_NONE;
     m_pVideoParams = pVideoParams;
+    if (NULL == m_pFrameAllocator)
+    {
+        bInited = false;
+    }
 
     // reset decoder
     if (bInited)
@@ -246,9 +252,10 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         // Check if video format is supported by HW acceleration
         if (MFX_WRN_PARTIAL_ACCELERATION == CheckHwAcceleration(pVideoParams))
         {
-            // Change behavior to SW decoding
-//            m_mfxImpl = MFX_IMPL_SOFTWARE;
-        }       
+            // Change allocator to system memory
+            //m_bUseD3DAlloc = false; // causes crashes!
+            m_bHwAcceleration = false; // this is just for knowledge
+        }
 
         // Setup allocator - will initialize D3D if needed
         sts = InitFrameAllocator(pVideoParams, nPitch);
@@ -256,14 +263,11 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
 
         // Init MSDK decoder
         sts = m_pmfxDEC->Init(pVideoParams);
-        if (MFX_WRN_PARTIAL_ACCELERATION == sts)
-        {
-            sts = MFX_ERR_NONE;
-            m_bHwAcceleration = false;
-        }
     }
 
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
+    MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
+
     return sts;
 }
 
@@ -330,10 +334,15 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, mfxFrameSurface1*& pFrame
 
 mfxStatus CQuickSyncDecoder::InitD3D()
 {
-    // check if the d3d device is functional:
-    if (m_pd3dDeviceManager != NULL)
+    if (!m_bUseD3DAlloc)
     {
-        HRESULT hr = m_pd3dDevice->TestCooperativeLevel();
+        return MFX_ERR_NONE;
+    }
+
+    // check if the d3d device is functional:
+    if (m_pD3dDeviceManager != NULL)
+    {
+        HRESULT hr = m_pD3dDevice->TestCooperativeLevel();
         if (FAILED(hr))
         {
             CloseD3D();
@@ -354,21 +363,14 @@ mfxStatus CQuickSyncDecoder::InitD3D()
     }
 
     static const POINT point = {0, 0};
-    const HWND window = WindowFromPoint(point);
+    const HWND hWnd = GetForegroundWindow();
+    if (hWnd == NULL)
+    {
+        MSDK_TRACE("QSDcoder: failed to create HWND.\n");
+        return MFX_ERR_DEVICE_FAILED;
+    }
 
-    D3DPRESENT_PARAMETERS d3dParams;
-    MSDK_ZERO_VAR(d3dParams);
-    d3dParams.Windowed = TRUE;
-    d3dParams.hDeviceWindow = window;
-    d3dParams.SwapEffect = D3DSWAPEFFECT_DISCARD;
-    d3dParams.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
-    d3dParams.Flags = D3DPRESENTFLAG_VIDEO;
-    d3dParams.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT;
-    d3dParams.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
-    d3dParams.BackBufferCount = 1;
-    d3dParams.BackBufferFormat = D3DFMT_X8R8G8B8;
-    d3dParams.BackBufferWidth = 0;
-    d3dParams.BackBufferHeight = 0;
+    D3DPRESENT_PARAMETERS d3dParams = {1, 1, D3DFMT_X8R8G8B8, 1, D3DMULTISAMPLE_NONE, 0, D3DSWAPEFFECT_DISCARD, hWnd, TRUE, FALSE, D3DFMT_UNKNOWN, 0, 0, D3DPRESENT_INTERVAL_IMMEDIATE};
 
     // find Intel adapter number - not always the default adapter
     int adapterId = GetIntelAdapterId(pd3d);
@@ -379,44 +381,53 @@ mfxStatus CQuickSyncDecoder::InitD3D()
     }
 
     // create d3d device
-    m_pd3dDevice = 0;
+    m_pD3dDevice = 0;
     HRESULT hr = pd3d->CreateDevice(
         adapterId,
         D3DDEVTYPE_HAL,
-        window,
+        hWnd,
         D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED | D3DCREATE_FPU_PRESERVE,
         &d3dParams,
-        &m_pd3dDevice);
+        &m_pD3dDevice);
 
-    if (FAILED(hr) || !m_pd3dDevice)
+    if (FAILED(hr) || !m_pD3dDevice)
     {
+        MSDK_TRACE("QSDcoder: InitD3d CreateDevice failed!\n");
         return MFX_ERR_DEVICE_FAILED;
     }
 
     // create device manager
-    m_pd3dDeviceManager = NULL;
-    hr = DXVA2CreateDirect3DDeviceManager9(&resetToken, &m_pd3dDeviceManager);
-    if (FAILED(hr) || !m_pd3dDeviceManager)
+    m_pD3dDeviceManager = NULL;
+    hr = DXVA2CreateDirect3DDeviceManager9(&resetToken, &m_pD3dDeviceManager);
+    if (FAILED(hr) || !m_pD3dDeviceManager)
     {
+        MSDK_TRACE("QSDcoder: InitD3d DXVA2CreateDirect3DDeviceManager9 failed!\n");
         return MFX_ERR_DEVICE_FAILED;
     }
 
     // reset the d3d device
-    hr = m_pd3dDeviceManager->ResetDevice(m_pd3dDevice, resetToken);
+    hr = m_pD3dDeviceManager->ResetDevice(m_pD3dDevice, resetToken);
     if (FAILED(hr))
     {
+        MSDK_TRACE("QSDcoder: InitD3d ResetDevice failed!\n");
         return MFX_ERR_DEVICE_FAILED;
     }
 
-    m_mfxVideoSession.SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, m_pd3dDeviceManager);
     return MFX_ERR_NONE;
 }
 
 void CQuickSyncDecoder::CloseD3D()
 {
-    m_mfxVideoSession.SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, NULL);
-    MSDK_SAFE_RELEASE(m_pd3dDeviceManager);
-    MSDK_SAFE_RELEASE(m_pd3dDevice);
+    if (m_bUseD3DAlloc)
+    {
+        m_mfxVideoSession.SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, NULL);
+
+        if (m_pD3dDevice)
+        {
+            MSDK_SAFE_RELEASE(m_pD3dDeviceManager);
+            MSDK_SAFE_RELEASE(m_pD3dDevice);
+        }
+    }
 }
 
 mfxStatus CQuickSyncDecoder::DecodeHeader(mfxBitstream* bs, mfxVideoParam* par)
@@ -445,28 +456,47 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
 
     MSDK_TRACE("QSDcoder: CreateAllocator\n");
 
-    mfxIMPL impl = QueryIMPL();
     ASSERT(m_pVideoParams != NULL);
-    m_pVideoParams->IOPattern = (mfxU16)((MFX_IMPL_SOFTWARE != impl) ? MFX_IOPATTERN_OUT_VIDEO_MEMORY : MFX_IOPATTERN_OUT_SYSTEM_MEMORY);
     std::auto_ptr<D3DAllocatorParams> pParam(NULL);
     mfxStatus sts = MFX_ERR_NONE;
 
     // Setup allocator - HW acceleration
-    if (MFX_IMPL_SOFTWARE != impl)
+    if (m_bUseD3DAlloc)
     {
-        if (!m_pd3dDeviceManager)
+        m_pVideoParams->IOPattern = MFX_IOPATTERN_OUT_VIDEO_MEMORY;
+        if (!m_pD3dDeviceManager)
         {
             sts = InitD3D();
-            MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
+            if (sts != MFX_ERR_NONE)
+            {
+                // Couldn't create our own device - probably a full screen exclusive player.
+                // We'll use the supplied renderer's device manager.
+                if (m_pRendererD2dDeviceManager != NULL)
+                {
+                    CloseD3D();
+
+                    m_pD3dDeviceManager = m_pRendererD2dDeviceManager;
+                    FreeFrameAllocator();
+                }
+                else
+                {
+                    MSDK_TRACE("QSDcoder: InitD3D failed!\n");
+                    return sts;
+                }
+            }
         }
 
+        m_mfxVideoSession.SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, m_pD3dDeviceManager);
+
         pParam.reset(new D3DAllocatorParams);
-        pParam->pManager = m_pd3dDeviceManager;
+        pParam->pManager = m_pD3dDeviceManager;
         m_pFrameAllocator = new D3DFrameAllocator();
     }
     // Setup allocator - No HW acceleration
     else
     {
+        m_bUseD3DAlloc = false;
+        m_pVideoParams->IOPattern = MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
         m_pFrameAllocator = new SysMemFrameAllocator();
     }
 
@@ -475,10 +505,16 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
     {
         // Note - setting the seesion allocator can be done only once!
         sts = m_mfxVideoSession.SetFrameAllocator(m_pFrameAllocator);
+        if (sts != MFX_ERR_NONE)
+        {
+            MSDK_TRACE("QSDcoder: Session SetFrameAllocator failed!\n");    
+        }
     }
     else
     // Allocator failed to initialize
     {
+        MSDK_TRACE("QSDcoder: Allocator Init failed!\n");
+
         MSDK_SAFE_DELETE(m_pFrameAllocator);
         ASSERT(false);
     }
@@ -498,4 +534,12 @@ mfxStatus CQuickSyncDecoder::UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameDat
     MSDK_CHECK_POINTER(pSurface, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(pFrameData, MFX_ERR_NULL_PTR);
     return m_pFrameAllocator->Unlock(m_pFrameAllocator, pSurface->Data.MemId, pFrameData);
+}
+
+void CQuickSyncDecoder::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
+{
+    if (m_pRendererD2dDeviceManager == pDeviceManager)
+        return;
+
+    m_pRendererD2dDeviceManager = pDeviceManager;
 }

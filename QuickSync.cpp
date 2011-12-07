@@ -36,8 +36,6 @@
 #include "QuickSyncUtils.h"
 #include "QuickSync.h"
 
-#define MEMCPY gpu_memcpy
-//#define MEMCPY memcpy
 #define PAGE_MASK 4095
 
 EXTERN_GUID(WMMEDIASUBTYPE_WVC1, 
@@ -64,15 +62,23 @@ CQuickSync::CQuickSync() :
 {
     MSDK_TRACE("QSDcoder: Constructor\n");
 
-
     mfxStatus sts = MFX_ERR_NONE;
     m_pDecoder = new CQuickSyncDecoder(sts);
 
     MSDK_ZERO_VAR(m_mfxParamsVideo);
     //m_mfxParamsVideo.AsyncDepth = 1; //causes issues when 1
     m_mfxParamsVideo.mfx.ExtendedPicStruct = 1;
-//    m_mfxParamsVideo.mfx.TimeStampCalc = MFX_TIMESTAMPCALC_TELECINE;
-    m_Config.dwOutputQueueLength = 8;
+
+    // Set default configuration - override what's not zero
+    m_Config.bMod16Width = false;
+    m_Config.nOutputQueueLength = 8;
+    m_Config.bEnableH264  = true;
+    m_Config.bEnableMPEG2 = true;
+    m_Config.bEnableVC1   = true;
+    m_Config.bEnableWMV9  = true;
+
+    // Currently not working well - menu decoding :(
+    m_Config.bEnableDvdDecoding = false;
 
     m_OK = (sts == MFX_ERR_NONE);
 }
@@ -95,6 +101,9 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
     //MPEG2
     if (subType == MEDIASUBTYPE_MPEG2_VIDEO)//(fourCC == FOURCC_mpg2) || (fourCC == FOURCC_MPG2))
     {
+        if (!m_Config.bEnableMPEG2)
+            return VFW_E_INVALIDMEDIATYPE;
+
         m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_MPEG2;
         m_pFrameConstructor = new CFrameConstructor;
         return S_OK;
@@ -108,10 +117,14 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
         if (subType ==  WMMEDIASUBTYPE_WMV3)
         {
             m_mfxParamsVideo.mfx.CodecProfile = MFX_PROFILE_VC1_SIMPLE;        
+            if (!m_Config.bEnableWMV9)
+                return VFW_E_INVALIDMEDIATYPE;
         }   
         else if (fourCC == FOURCC_VC1)
         {
             m_mfxParamsVideo.mfx.CodecProfile = MFX_PROFILE_VC1_ADVANCED;
+            if (!m_Config.bEnableVC1)
+                return VFW_E_INVALIDMEDIATYPE;
         }
         else
         {
@@ -127,6 +140,9 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
         (fourCC == FOURCC_avc1) || (fourCC == FOURCC_VSSH) || (fourCC == FOURCC_DAVC) ||
         (fourCC == FOURCC_PAVC) || (fourCC == FOURCC_AVC1))
     {
+        if (!m_Config.bEnableH264)
+            return VFW_E_INVALIDMEDIATYPE;
+
         m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_AVC;
 
         m_pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1)) ?
@@ -145,25 +161,18 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (!m_OK)
         return E_FAIL;
 
-
-    return S_OK;
-
-
-
-
-
-    CQsAutoLock cObjectLock(&m_csLock);
-
     // Parameter check
     MSDK_CHECK_POINTER(mtIn, E_POINTER);
     MSDK_CHECK_POINTER(mtIn->pbFormat, E_UNEXPECTED);
 
-    if (!(mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK || mtIn->majortype == MEDIATYPE_Video))
-        return VFW_E_INVALIDMEDIATYPE;
+    // disable DVD playback until it's OK
+    if (mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK)
+        return E_FAIL;
+    else if (mtIn->majortype != MEDIATYPE_Video)
+        return E_FAIL;
 
     HRESULT hr;
     VIDEOINFOHEADER2* vih2 = NULL;
-    mfxStatus sts = MFX_ERR_NONE;
     const GUID& subType = mtIn->subtype;
     hr = HandleSubType(subType, fourCC);
     MSDK_CHECK_RESULT_P_RET(hr, S_OK);
@@ -182,26 +191,10 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     {
         MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(mtIn->pbFormat);
         hr = CheckCodecProfileSupport(mfx.CodecId, mp2->dwProfile, mp2->dwLevel);
-        if (hr != S_OK)
-        {
-            MSDK_TRACE("QSDcoder::InitDecoder - failed due to unsupported codec (%s), profile (%s), level (%i) combination\n",
-                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
-            sts = MFX_ERR_UNSUPPORTED;
-            goto done;
-        }
-        else
-        {
-            MSDK_TRACE("QSDcoder::InitDecoder - codec (%s), profile (%s), level (%i)\n",
-                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
-        }
     }
 
-
-
-done:
     delete[] (mfxU8*)vih2;
-
-    return S_OK;
+    return hr;
 }
 
 HRESULT CQuickSync::CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize)
@@ -258,7 +251,6 @@ HRESULT CQuickSync::CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, V
 }
 
 HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
-
 {
     MSDK_TRACE("QSDcoder: InitDecoder\n");
 
@@ -330,8 +322,13 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     // Simple info header (without extra data) or DecodeHeader failed (usually not critical)
     else
     {
+        mfx.FrameInfo.CropW        = (mfxU16)vih2->bmiHeader.biWidth;
+        if (m_Config.bMod16Width)
+        {
+            mfx.FrameInfo.CropW = MSDK_ALIGN16(mfx.FrameInfo.CropW);
+        }
+
         mfx.FrameInfo.CropH        = (mfxU16)MSDK_ALIGN16(vih2->bmiHeader.biHeight);
-        mfx.FrameInfo.CropW        = (mfxU16)MSDK_ALIGN16(vih2->bmiHeader.biWidth);
         mfx.FrameInfo.Width        = mfx.FrameInfo.CropW;
         mfx.FrameInfo.Height       = mfx.FrameInfo.CropH;
         mfx.FrameInfo.FourCC       = MFX_FOURCC_NV12;
@@ -364,17 +361,12 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     SetAspectRatio(*vih2, mfx.FrameInfo);
 
-    // Init Media SDK decoder
+    // Init Media SDK decoder is done in OnSeek to allow late initialization needed
+    // by full screen exclusive mode since D3D devices can't be created. The DS filter must send
+    // the D3D device manager to this decoder for surface allocation.
     if (sts == MFX_ERR_NONE)
     {
         m_pDecoder->SetConfig(m_Config);
-        sts = m_pDecoder->Init(&m_mfxParamsVideo, m_nPitch);
-        
-        if (sts == MFX_WRN_PARTIAL_ACCELERATION)
-        {
-            MSDK_TRACE("\n\n\nQSDcoder::InitDecoder - stream isn't supported by HW acceleration!\n\n\n\n");
-            sts = MFX_ERR_NONE;
-        }
     }
 
 done:
@@ -383,9 +375,9 @@ done:
     return (m_OK) ? S_OK : E_FAIL;
 }
 
-void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo)
+void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& frameInfo)
 {
-    DWORD alignedWidth = MSDK_ALIGN16(FrameInfo.CropW);
+    DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(frameInfo.CropW) : frameInfo.CropW;
     
     // fix small aspect ratio errors
     if (MSDK_ALIGN16(vih2.dwPictAspectRatioX) == alignedWidth)
@@ -394,24 +386,24 @@ void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo)
     }
 
     // AR is not always contained in the header (it's optional for MFX decoder initialization though)
-    if (FrameInfo.AspectRatioW * FrameInfo.AspectRatioH == 0)
+    if (frameInfo.AspectRatioW * frameInfo.AspectRatioH == 0)
     {
         //convert display aspect ratio (is in VIDEOINFOHEADER2) to pixel aspect ratio (is accepted by MediaSDK components)
         mfxStatus sts = DARtoPAR(vih2.dwPictAspectRatioX, vih2.dwPictAspectRatioY, 
-            FrameInfo.CropW, FrameInfo.CropH,
-            FrameInfo.AspectRatioW, FrameInfo.AspectRatioH);
+            frameInfo.CropW, frameInfo.CropH,
+            frameInfo.AspectRatioW, frameInfo.AspectRatioH);
 
         if (sts != MFX_ERR_NONE)
         {
-            FrameInfo.AspectRatioW = FrameInfo.AspectRatioH = 1;
+            frameInfo.AspectRatioW = frameInfo.AspectRatioH = 1;
         }
     }
 
     // use image size as aspect ratio when PAR is 1x1
-    if (FrameInfo.AspectRatioW == FrameInfo.AspectRatioH)
+    if (frameInfo.AspectRatioW == frameInfo.AspectRatioH)
     {
         m_FrameData.dwPictAspectRatioX = alignedWidth;
-        m_FrameData.dwPictAspectRatioY = FrameInfo.CropH;
+        m_FrameData.dwPictAspectRatioY = frameInfo.CropH;
     }
     else
     {
@@ -472,6 +464,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     ASSERT(mfxBS.DataLength <= mfxBS.MaxLength);
     MSDK_CHECK_ERROR(sts, MFX_ERR_MORE_DATA, S_OK); // not an error
     MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, E_FAIL);
+    bool flushed = false;
 
     // Decode mfxBitstream until all data is taken by decoder
     while (mfxBS.DataLength > 0 && !m_bNeedToFlush)
@@ -494,7 +487,13 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
 
             // Need to reset the analysis done so far...
 
-            sts = OnVideoParamsChanged();
+            if (!flushed)
+            {
+                sts = OnVideoParamsChanged();
+//                Flush(true);
+                flushed = true;
+            }
+
             continue; // just continue processing
         }
         // Need another work surface
@@ -566,6 +565,8 @@ HRESULT CQuickSync::DeliverSurface(mfxFrameSurface1* pSurface)
 
     MSDK_CHECK_POINTER(m_DeliverSurfaceCallback, E_UNEXPECTED);
 
+    m_FrameData.fourCC = FOURCC_NV12;
+
     // Got a new surface. A NULL surface means to get a surface from the output queue
     if (pSurface != NULL)
     {
@@ -577,8 +578,7 @@ HRESULT CQuickSync::DeliverSurface(mfxFrameSurface1* pSurface)
         PushSurface(pSurface);
 
         // Not enough surfaces for proper time stamp correction
-        DWORD queueSize = (m_bDvdDecoding) ? 0 :
-            m_Config.dwOutputQueueLength;
+        DWORD queueSize = (m_bDvdDecoding) ? 0 : m_Config.nOutputQueueLength;
 
         if (!m_bForceOutput && m_pDecoder->GetOutputQueue()->size() < queueSize)
             return S_OK;
@@ -634,26 +634,57 @@ HRESULT CQuickSync::DeliverSurface(mfxFrameSurface1* pSurface)
     size_t height = pSurface->Info.CropH; // Cropped image height
     size_t pitch  = frameData.Pitch;      // Image line + padding in bytes --> set by the driver
 
-    // Fill output size
-    m_FrameData.dwHeight = pSurface->Info.CropH;
-    m_FrameData.dwWidth  = MSDK_ALIGN16(pSurface->Info.CropW + pSurface->Info.CropX);
+    // Fill image size
+    m_FrameData.rcFull.top    = m_FrameData.rcFull.left = 0;
+    m_FrameData.rcFull.bottom = height - 1;
+    m_FrameData.rcFull.right  = MSDK_ALIGN16(pSurface->Info.CropW + pSurface->Info.CropX) - 1;
+    m_FrameData.rcClip.top    = 0;
+    m_FrameData.rcClip.bottom = height - 1;
+
+    if (m_Config.bMod16Width)
+    {
+        m_FrameData.rcClip = m_FrameData.rcFull;
+    }
+    else
+    {
+        m_FrameData.rcClip.left  = pSurface->Info.CropX;
+        m_FrameData.rcClip.right = pSurface->Info.CropW + pSurface->Info.CropX - 1;
+    }
 
     // Offset output buffer's address for fastest SSE4 copy.
     // Page offset (12 lsb of addresses) sould be 2K apart from source buffer
     size_t offset = ((size_t)frameData.Y & PAGE_MASK) ^ (1 << 11);
-    m_FrameData.y = m_OutputBuffer + offset;
-    m_FrameData.u = m_FrameData.y + (pitch * height);
-
-    // Copy Y
-    MEMCPY(m_FrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
-
-    // Copy UV
-    MEMCPY(m_FrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
-
-    // Add borders for non standard images
-    if (pSurface->Info.CropW < m_FrameData.dwWidth)
+    
+    // Source is D3D9 surface
+    if (m_pDecoder->IsD3DAlloc())
     {
-        AddBorders(pSurface);
+        m_FrameData.y = m_OutputBuffer + offset;
+        m_FrameData.u = m_FrameData.y + (pitch * height);
+
+        // Copy Y
+        gpu_memcpy(m_FrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
+
+        // Copy UV
+        gpu_memcpy(m_FrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
+
+        // Add borders for non standard images
+        //unsigned dwWidth = m_FrameData.rcFull.right + 1;
+        //if (m_Config.bMod16Width && pSurface->Info.CropW < dwWidth)
+        //{
+        //    AddBorders(pSurface);
+        //}
+
+        // App can modify this buffer
+        m_FrameData.bReadOnly = false;
+    }
+    // Source is system memory
+    else
+    {
+        m_FrameData.y = frameData.Y + (pSurface->Info.CropY * pitch);
+        m_FrameData.u = frameData.CbCr + (pSurface->Info.CropY * pitch);
+
+        // App can't modify this buffer - cause corruption
+        m_FrameData.bReadOnly = false;
     }
 
     // Unlock the frame
@@ -670,12 +701,12 @@ HRESULT CQuickSync::DeliverSurface(mfxFrameSurface1* pSurface)
 
 void CQuickSync::AddBorders(mfxFrameSurface1* pSurface)
 {
-    DWORD h = m_FrameData.dwHeight;
+    int h = (int)m_FrameData.rcClip.bottom + 1;
 
     // Left border
     if (pSurface->Info.CropX > 0)
     {
-        for (DWORD y = 0; y < h; ++y)
+        for (int y = 0; y < h; ++y)
         {
             memset(m_FrameData.y + m_FrameData.dwStride * y, 16, pSurface->Info.CropX);
 
@@ -687,10 +718,10 @@ void CQuickSync::AddBorders(mfxFrameSurface1* pSurface)
     }
 
     // Right border
-    int rBorderWidth = (int)m_FrameData.dwWidth - (pSurface->Info.CropX + pSurface->Info.CropW);
+    int rBorderWidth = (int)m_FrameData.rcFull.right + 1 - (pSurface->Info.CropX + pSurface->Info.CropW);
     if (rBorderWidth)
     {
-        for (DWORD y = 0; y < m_FrameData.dwHeight; ++y)
+        for (int y = 0; y < h; ++y)
         {
             memset(m_FrameData.y + m_FrameData.dwStride * y + pSurface->Info.CropX + pSurface->Info.CropW,
                 16, rBorderWidth);
@@ -712,19 +743,19 @@ mfxU32 CQuickSync::PicStructToDsFlags(mfxU32 picStruct)
     }
 
     mfxU32 flags = 0;
-    // progressive frame - note that sometimes interlaced content has the MFX_PICSTRUCT_PROGRESSIVE in combination with other flags
+    // Progressive frame - note that sometimes interlaced content has the MFX_PICSTRUCT_PROGRESSIVE in combination with other flags
     if (picStruct == MFX_PICSTRUCT_PROGRESSIVE)
     {
         return AM_VIDEO_FLAG_WEAVE;
     }
 
-    // top field first
+    // Top field first
     if (picStruct & MFX_PICSTRUCT_FIELD_TFF)
     {
         flags |= AM_VIDEO_FLAG_FIELD1FIRST;
     }
 
-    // telecine flag
+    // Telecine flag
     if (picStruct & MFX_PICSTRUCT_FIELD_REPEATED)
     {
         flags |= AM_VIDEO_FLAG_REPEAT_FIELD;
@@ -766,8 +797,8 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     HRESULT hr = S_OK;
     mfxStatus sts = MFX_ERR_NONE;
 
-    // recieved a BeginFlush that wasn't handled for some reason
-    // this overrides the request to output the remaining frames
+    // Recieved a BeginFlush that wasn't handled for some reason.
+    // This overrides the request to output the remaining frames
     deliverFrames = deliverFrames && !m_bNeedToFlush;
     m_bForceOutput = deliverFrames;
 
@@ -837,13 +868,20 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
     {
         m_TimeManager.Reset();
         sts = m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
-        ASSERT(sts == MFX_ERR_NONE);
+        if (sts != MFX_ERR_NONE)
+        {
+            MSDK_TRACE("QSDcoder: reset failed!\n");
+            ASSERT(sts == MFX_ERR_NONE);
+            return E_FAIL;
+        }
+        
         m_pFrameConstructor->Reset();
 
         FlushOutputQueue(false);
     }
 
     m_bNeedToFlush = false;
+    MSDK_TRACE("QSDcoder: OnSeek complete\n");
     return (sts == MFX_ERR_NONE) ? S_OK : E_FAIL;
 }
 
@@ -869,9 +907,8 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
     bool bResChange = (curInfo.CropH != newInfo.CropH) || (curInfo.CropW != newInfo.CropW);
     bool bAspectRatioChange = (curInfo.AspectRatioH != newInfo.AspectRatioH) || (curInfo.AspectRatioW != newInfo.AspectRatioW);
     bool bFrameRateChange = (curInfo.FrameRateExtN != newInfo.FrameRateExtN) ||(curInfo.FrameRateExtD != newInfo.FrameRateExtD);
-    bool bFrameStructChange = curInfo.PicStruct != newInfo.PicStruct;
 
-    if (!(bResChange || bAspectRatioChange || bFrameRateChange || bFrameStructChange))
+    if (!(bResChange || bAspectRatioChange || bFrameRateChange))
         return MFX_ERR_NONE;
 
     // Copy video params
@@ -885,19 +922,16 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
     // Calculate new size and aspect ratio
     if (bAspectRatioChange || bResChange)
     {
-        DWORD alignedWidth = MSDK_ALIGN16(newInfo.CropW);        
+        DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(newInfo.CropW) : newInfo.CropW;
         PARtoDAR(newInfo.AspectRatioW, newInfo.AspectRatioH, alignedWidth, newInfo.CropH, m_FrameData.dwPictAspectRatioX, m_FrameData.dwPictAspectRatioY);
     }
 
-    if (bFrameRateChange || bFrameStructChange)
+    if (bFrameRateChange)
     {
         double frameRate = (double)curInfo.FrameRateExtN / (double)curInfo.FrameRateExtD;
         m_TimeManager.OnVideoParamsChanged(frameRate);
     }
 
-    // Might be needed for DVD menus - currently not working as expected :(
-//    Flush(true);
-//    OnSeek(0);
     return MFX_ERR_NONE;
 }
 
@@ -962,4 +996,25 @@ HRESULT CQuickSync::CheckCodecProfileSupport(DWORD codec, DWORD profile, DWORD l
     }
 
     return E_NOTIMPL;
+}
+
+void CQuickSync::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
+{
+    m_pDecoder->SetD3DDeviceManager(pDeviceManager);
+}
+
+void CQuickSync::GetConfig(CQsConfig* pConfig)
+{
+    if (NULL == pConfig)
+        return;
+
+    *pConfig = m_Config;
+}
+
+void CQuickSync::SetConfig(CQsConfig* pConfig)
+{
+    if (NULL == pConfig)
+        return;
+
+    m_Config = *pConfig;
 }

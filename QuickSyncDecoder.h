@@ -51,10 +51,12 @@ public:
 
     mfxStatus Decode(mfxBitstream* pBS, mfxFrameSurface1*& pFrameSurface);
     mfxStatus GetVideoParams(mfxVideoParam* pVideoParams);
-    IDirect3DDeviceManager9*& GetD3dDeviceManager()
+    IDirect3DDeviceManager9* GetD3DDeviceManager()
     {
-        return m_pd3dDeviceManager;
+        return m_pD3dDeviceManager;
     }
+
+    void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
 
     mfxStatus CreateAllocator();
     mfxStatus InitFrameAllocator(mfxVideoParam* pVideoParams, mfxU32 nPitch);
@@ -84,6 +86,9 @@ public:
         return pSurface;
     }
 
+    bool IsD3DAlloc() { return m_bUseD3DAlloc; }
+    bool IsHwAccelerated() { return m_bHwAcceleration; }
+
     mfxStatus LockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
     mfxStatus UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
 
@@ -110,10 +115,13 @@ protected:
     mfxFrameSurface1*     m_pFrameSurfaces;
     mfxFrameAllocResponse m_AllocResponse;
     mfxU16                m_nRequiredFramesNum;
+    bool                  m_bUseD3DAlloc;
 
     // D3D/DXVA interfaces
-    IDirect3DDeviceManager9* m_pd3dDeviceManager; 
-    IDirect3DDevice9*        m_pd3dDevice;
+    IDirect3DDeviceManager9* m_pRendererD2dDeviceManager;
+    IDirect3DDeviceManager9* m_pD3dDeviceManager; 
+
+    IDirect3DDevice9*        m_pD3dDevice;
 
     TSurfaceQueue m_OutputSurfaceQueue;
 
