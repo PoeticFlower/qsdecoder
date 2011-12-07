@@ -62,6 +62,7 @@ public:
         m_dFrameRate = (bIsFields && frameRate < 30.0) ? (frameRate / 2) : frameRate;
         m_dOrigFrameRate = m_dFrameRate;
         m_bIsSampleInFields = bIsFields;
+        MSDK_TRACE("QsDecoder: frame rate is %0.2f\n", (float)(m_dFrameRate));
     }
 
     void Reset();

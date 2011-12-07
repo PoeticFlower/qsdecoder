@@ -29,7 +29,10 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.18 Alpha"
+#define QS_DEC_VERSION  "v0.19 Alpha"
+
+// Forward declarations
+struct IDirect3DDeviceManager9;
 
 // This struct holds an output frame + meta data
 struct QsFrameData
@@ -47,26 +50,53 @@ struct QsFrameData
     unsigned char* y;
     unsigned char* u;
     unsigned char* v;
-    DWORD dwWidth;
-    DWORD dwHeight;
-    DWORD dwStride;
+    DWORD          fourCC;
+    RECT           rcFull;
+    RECT           rcClip;
+    DWORD          dwStride;
     REFERENCE_TIME rtStart, rtStop;
     DWORD          dwInterlaceFlags; // same as dwTypeSpecificFlags (AM_SAMPLE2_PROPERTIES)
     bool           bFilm;
-    DWORD dwPictAspectRatioX;
-    DWORD dwPictAspectRatioY;
-    QsFrameType frameType;
+    DWORD          dwPictAspectRatioX;
+    DWORD          dwPictAspectRatioY;
+    QsFrameType    frameType;
+    bool           bReadOnly;
 };
 
 // config for QuickSync component
 struct CQsConfig
 {
-    CQsConfig() :
-        dwOutputQueueLength(16)
+    CQsConfig()
     {
+        memset(this, 0, sizeof(CQsConfig));
     }
 
-    DWORD dwOutputQueueLength;
+    // misc
+    union
+    {
+        unsigned misc;
+        struct
+        {
+            unsigned nOutputQueueLength :  6; // use a minimum of 8 frame for more accurate frame rate calculations
+            bool     bMod16Width        :  1;
+            unsigned reserved1          : 25;
+        };
+    };
+
+    // Codec support
+    union
+    {
+        unsigned codecs;
+        struct
+        {
+            bool  bEnableDvdDecoding : 1;
+            bool  bEnableH264        : 1;
+            bool  bEnableMPEG2       : 1;
+            bool  bEnableVC1         : 1;
+            bool  bEnableWMV9        : 1;
+            unsigned reserved2 : 27;
+        };
+    };
 };
 
 // Interafce to QuickSync component
@@ -113,8 +143,20 @@ struct IQuickSyncDecoder
     // An implicit OnSeek call will be generated after the next Decode call.
     virtual HRESULT EndFlush() = 0;
 
+    // Call this function to pass a D3D device manager to the decoder from the EVR
+    // Must be used in full screen exlusive mode
+    virtual void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager) = 0;
+
     // Sets the callback funtion for a DeliverSurface event. This the only method for frame delivery.
     virtual void SetDeliverSurfaceCallback(void* obj, TQS_DeliverSurfaceCallback func) = 0;
+
+    // Fills the pConfig struct with current config.
+    // If called after construction will contain the defaults.
+    virtual void GetConfig(CQsConfig* pConfig) = 0;
+
+    // Call this function to modify the decoder config.
+    // Must be called before calling the InitDecoder method.
+    virtual void SetConfig(CQsConfig* pConfig) = 0;
 
 protected:
     // Ban copying!

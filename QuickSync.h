@@ -71,6 +71,7 @@ protected:
         return S_OK;
     }
 
+    virtual void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
     HRESULT HandleSubType(const GUID& subType, FOURCC fourCC);
     HRESULT CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize);
     HRESULT DeliverSurface(mfxFrameSurface1* pSurfaceOut);
@@ -81,6 +82,9 @@ protected:
         m_DeliverSurfaceCallback = func;
     }
     virtual HRESULT OnSeek(REFERENCE_TIME segmentStart);
+    virtual void GetConfig(CQsConfig* pConfig);
+    virtual void SetConfig(CQsConfig* pConfig);
+
     bool SetTimeStamp(mfxFrameSurface1* pSurface);
     void SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo);
     mfxStatus ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN, mfxU32& nFrameRateExtD);

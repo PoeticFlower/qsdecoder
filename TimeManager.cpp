@@ -162,13 +162,14 @@ bool CDecTimeManager::CalcFrameRate(const mfxFrameSurface1* pSurface,
         m_dFrameRate = avgFrameRate;
     }
 
+    MSDK_TRACE("QsDecoder: frame rate is %0.2f\n", (float)(m_dFrameRate));
     m_bValidFrameRate = true;
     return true;
 }
 
 void CDecTimeManager::SetInverseTelecine(bool bIvtc)
 {
-    // nothing changed
+    // Nothing changed
     bIvtc = bIvtc && m_bEnableIvtc;
 
     if (bIvtc == m_bIvtc)
@@ -178,10 +179,12 @@ void CDecTimeManager::SetInverseTelecine(bool bIvtc)
     if (m_bIvtc)
     {
         FixFrameRate(fps23976);
+        MSDK_TRACE("QsDecoder: entering IVTC\n", (float)(m_dFrameRate));
     }
     else
     {
         FixFrameRate(fps2997);
+        MSDK_TRACE("QsDecoder: leaving IVTC\n", (float)(m_dFrameRate));
     }
 }
 
@@ -218,7 +221,6 @@ bool CDecTimeManager::GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
         m_nLastSeenFieldDoubling = 0;
     }
     // Return to normal frame rate due to content change
-    // allow a 1 second grace for the stream to revert to ivtc
     else if (m_nLastSeenFieldDoubling > 1) //m_dFrameRate)
     {
         SetInverseTelecine(false);
@@ -340,10 +342,7 @@ bool CDecTimeManager::GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
                 return false;
             }
         }
-    }
-        
-        
-        
+    }   
 
     rtStop = rtStart + 1;
     m_rtPrevStart = rtStart;
@@ -384,6 +383,7 @@ void CDecTimeManager::FixFrameRate(double frameRate)
     }
 
     m_dFrameRate = frameRate;
+    MSDK_TRACE("QsDecoder: frame rate is %0.2f\n", (float)(m_dFrameRate));
 }
 
 bool CDecTimeManager::CalcCurrentFrameRate(double& tmpFrameRate, size_t nQueuedFrames)

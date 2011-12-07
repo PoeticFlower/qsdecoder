@@ -110,6 +110,9 @@
 #define FOURCC_PAVC mmioFOURCC('P','A','V','C')
 #define FOURCC_AVC1 mmioFOURCC('A','V','C','1')
 
+// Output formats
+#define FOURCC_NV12 mmioFOURCC('N','V','1','2')
+
 // compatibility with SDK v2.0
 #ifndef MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET
 #   define MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET MFX_MEMTYPE_DXVA2_DECODER_TARGET
