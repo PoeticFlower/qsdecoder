@@ -33,6 +33,21 @@
 #include "TimeManager.h"
 #include "QuickSync.h"
 
+#define TO_STRING(s) #s
+#ifdef __INTEL_COMPILER
+#   define COMPILER "ICL"
+#   define COMPILER_VER ((float)__INTEL_COMPILER) / 100)
+#elif defined(_MSC_VER)
+#   define COMPILER "MSVC"
+#   if _MSC_VER==1600
+#       define COMPILER_VER "2010"
+#   elif _MSC_VER==1500
+#       define COMPILER_VER "2008"
+#   endif
+#else
+#   define COMPILER "Unknown and not supported"
+#endif
+
 IQuickSyncDecoder* __stdcall createQuickSync()
 {
     return new CQuickSync();
@@ -45,6 +60,6 @@ void __stdcall destroyQuickSync(IQuickSyncDecoder* p)
 
 void __stdcall getVersion(char* ver, const char** license)
 {
-    strcpy(ver, QS_DEC_VERSION " by Eric Gur. Compiled using MSVC 2010 ("__DATE__" "__TIME__")");
+    strcpy(ver, QS_DEC_VERSION " by Eric Gur. Compiled using " COMPILER " " COMPILER_VER  " (" __DATE__ " " __TIME__ ")");
     *license = "(C) 2011 Intel\xae Corp.";
 }
