@@ -34,7 +34,8 @@
 //    MFXFrameAllocator
 /////////////////////////////////////////////////////////////////////////////////////////////
 MFXFrameAllocator::MFXFrameAllocator()
-{    
+{
+    MSDK_ZERO_MEMORY(reserved, sizeof(reserved));
     pthis = this;
     Alloc = Alloc_;
     Lock  = Lock_;

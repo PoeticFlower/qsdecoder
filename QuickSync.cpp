@@ -636,10 +636,10 @@ HRESULT CQuickSync::DeliverSurface(mfxFrameSurface1* pSurface)
 
     // Fill image size
     m_FrameData.rcFull.top    = m_FrameData.rcFull.left = 0;
-    m_FrameData.rcFull.bottom = height - 1;
+    m_FrameData.rcFull.bottom = (LONG)height - 1;
     m_FrameData.rcFull.right  = MSDK_ALIGN16(pSurface->Info.CropW + pSurface->Info.CropX) - 1;
     m_FrameData.rcClip.top    = 0;
-    m_FrameData.rcClip.bottom = height - 1;
+    m_FrameData.rcClip.bottom = (LONG)height - 1;
 
     if (m_Config.bMod16Width)
     {
@@ -676,6 +676,12 @@ HRESULT CQuickSync::DeliverSurface(mfxFrameSurface1* pSurface)
 
         // App can modify this buffer
         m_FrameData.bReadOnly = false;
+
+        // Debug only - mark top left corner when working withg D3D
+#ifdef _DEBUG
+        memset(m_FrameData.u, 0xff, 4);
+#endif
+
     }
     // Source is system memory
     else
@@ -871,12 +877,10 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
         if (sts != MFX_ERR_NONE)
         {
             MSDK_TRACE("QSDcoder: reset failed!\n");
-            ASSERT(sts == MFX_ERR_NONE);
             return E_FAIL;
         }
         
         m_pFrameConstructor->Reset();
-
         FlushOutputQueue(false);
     }
 

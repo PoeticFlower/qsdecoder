@@ -30,6 +30,10 @@
 #include "QuickSync_defs.h"
 #include "CodecInfo.h"
 
+static bool CheckForSSE41();
+
+static const bool s_SSE4_1_enabled = CheckForSSE41();
+
 // gpu_memcpy is a memcpy style function that copied data very fast from a
 // GPU tiled memory (write back)
 // Performance tip: page offset (12 lsb) of both addresses should be different
@@ -40,7 +44,7 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
 
     //if memory is not aligned, use memcpy
     bool isAligned = (((size_t)(s) | (size_t)(d)) & 0xF) == 0;
-    if (!isAligned)
+    if (!(isAligned && s_SSE4_1_enabled))
     {
         return memcpy(d, s, size);
     }
@@ -61,8 +65,8 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
 #ifdef _M_X64 
     while (pTrg < pTrgEnd)
     {
-        // Emits the Streaming SIMD Extensions 4 (SSE4) instruction movntdqa
-        // fastest method for copying GPU RAM
+        // Emits the Streaming SIMD Extensions 4 (SSE4.1) instruction movntdqa
+        // fastest method for copying GPU RAM. Availble since Penryn (45nm Core 2 Dou/Quad)
         pTrg[0] = _mm_stream_load_si128(&pSrc[0]);
         pTrg[1] = _mm_stream_load_si128(&pSrc[1]);
         pTrg[2] = _mm_stream_load_si128(&pSrc[2]);
@@ -375,4 +379,12 @@ const char* GetProfileName(DWORD codec, DWORD profile)
     }
 
     return "Unknown";
+}
+
+static bool CheckForSSE41()
+{
+   int CPUInfo[4];
+    __cpuid(CPUInfo, 1);
+
+    return 0 != (CPUInfo[2] & (1<<19)); //19th bit of 2nd reg means sse4.1 is enabled
 }

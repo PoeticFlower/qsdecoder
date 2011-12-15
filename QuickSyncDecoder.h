@@ -62,7 +62,7 @@ public:
     mfxStatus InitFrameAllocator(mfxVideoParam* pVideoParams, mfxU32 nPitch);
     mfxStatus FreeFrameAllocator();
 
-    inline mfxIMPL QueryIMPL() 
+    inline mfxIMPL QueryIMPL()
     {
         return m_mfxImpl;
     }
