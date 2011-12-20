@@ -45,7 +45,7 @@
 #   endif
 #elif defined(_MSC_VER)
 #   if _MSC_VER==1600
-#       define COMPILER_VER "MSVC 2010"
+#       define COMPILER "MSVC 2010"
 #   elif _MSC_VER==1500
 #       define COMPILER "MSVC 2008"
 #   else    
