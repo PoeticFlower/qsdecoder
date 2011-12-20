@@ -41,7 +41,7 @@
 #   elif __INTEL_COMPILER >= 1000
 #       define COMPILER "ICL 10"
 #   else
-#       define COMPILER_VER "ICL"
+#       define COMPILER "ICL"
 #   endif
 #elif defined(_MSC_VER)
 #   if _MSC_VER==1600
