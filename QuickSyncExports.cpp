@@ -33,19 +33,32 @@
 #include "TimeManager.h"
 #include "QuickSync.h"
 
-#define TO_STRING(s) #s
 #ifdef __INTEL_COMPILER
-#   define COMPILER "ICL"
-#   define COMPILER_VER ((float)__INTEL_COMPILER) / 100)
+#   if __INTEL_COMPILER >= 1200
+#       define COMPILER "ICL 12"
+#   elif __INTEL_COMPILER >= 1100
+#       define COMPILER "ICL 11"
+#   elif __INTEL_COMPILER >= 1000
+#       define COMPILER "ICL 10"
+#   else
+#       define COMPILER_VER "ICL"
+#   endif
 #elif defined(_MSC_VER)
-#   define COMPILER "MSVC"
 #   if _MSC_VER==1600
-#       define COMPILER_VER "2010"
+#       define COMPILER_VER "MSVC 2010"
 #   elif _MSC_VER==1500
-#       define COMPILER_VER "2008"
+#       define COMPILER "MSVC 2008"
+#   else    
+#       define COMPILER "MSVC"
 #   endif
 #else
-#   define COMPILER "Unknown and not supported"
+#   define COMPILER "Unknown and not supported compiler"
+#endif
+
+#ifndef _M_X64
+#   define ARCH "x86"
+#else
+#   define ARCH "x64"
 #endif
 
 IQuickSyncDecoder* __stdcall createQuickSync()
@@ -60,6 +73,7 @@ void __stdcall destroyQuickSync(IQuickSyncDecoder* p)
 
 void __stdcall getVersion(char* ver, const char** license)
 {
-    strcpy(ver, QS_DEC_VERSION " by Eric Gur. Compiled using " COMPILER " " COMPILER_VER  " (" __DATE__ " " __TIME__ ")");
+    static const char s_Version[] = QS_DEC_VERSION " by Eric Gur. " COMPILER ", " ARCH " (" __DATE__ " " __TIME__ ")";
+    strcpy_s(ver, 100, s_Version);
     *license = "(C) 2011 Intel\xae Corp.";
 }

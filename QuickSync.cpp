@@ -55,10 +55,10 @@ CQuickSync::CQuickSync() :
     m_OutputBuffer(NULL),
     m_OutputBufferSize(0),
     m_nSegmentFrameCount(0),
-    m_bForceOutput(false),
-    m_bDvdDecoding(false),
     m_bFlushing(false),
-    m_bNeedToFlush(false)
+    m_bNeedToFlush(false),
+    m_bForceOutput(false),
+    m_bDvdDecoding(false)
 {
     MSDK_TRACE("QSDcoder: Constructor\n");
 
@@ -262,6 +262,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     HRESULT hr;
     MSDK_CHECK_POINTER(mtIn, E_POINTER);
     MSDK_CHECK_POINTER(mtIn->pbFormat, E_UNEXPECTED);
+    bool bIsFields = false;
 
     if (!(mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK || mtIn->majortype == MEDIATYPE_Video))
         return VFW_E_INVALIDMEDIATYPE;
@@ -341,7 +342,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     ASSERT(sts == MFX_ERR_NONE);
 
     // setup frame rate from either the media type or the decoded header
-    bool bIsFields = (vih2->dwInterlaceFlags & AMINTERLACE_IsInterlaced) &&
+    bIsFields = (vih2->dwInterlaceFlags & AMINTERLACE_IsInterlaced) &&
         (vih2->dwInterlaceFlags & AMINTERLACE_1FieldPerSample);
     // Try getting the frame rate from the decoded headers
     if (0 < vih2->AvgTimePerFrame)

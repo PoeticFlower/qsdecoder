@@ -51,7 +51,7 @@ typedef std::multiset<REFERENCE_TIME> TSortedTimeStamps;
 class CDecTimeManager
 {
 public:
-    CDecTimeManager(bool bEnableIvtc = true) : m_dFrameRate(0), m_dOrigFrameRate(0), m_bIvtc(false), m_bEnableIvtc(bEnableIvtc)
+    CDecTimeManager(bool bEnableIvtc = true) : m_dOrigFrameRate(0), m_dFrameRate(0), m_bIvtc(false), m_bEnableIvtc(bEnableIvtc)
     {
         Reset();
     }
