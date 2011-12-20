@@ -181,7 +181,7 @@ void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID)
 void DebugAssert(const TCHAR* pCondition,const TCHAR* pFileName, int iLine)
 {
     TCHAR szInfo[256];
-    _stprintf(szInfo, _T("%s \nAt line %d of %s\nContinue? (Cancel to debug)"), pCondition, iLine, pFileName);
+    _stprintf_s(szInfo, _T("%s \nAt line %d of %s\nContinue? (Cancel to debug)"), sizeof(szInfo), pCondition, iLine, pFileName);
 
     int msgId = MessageBox(NULL, szInfo, _T("ASSERT Failed"),
         MB_SYSTEMMODAL | MB_ICONHAND | MB_YESNOCANCEL | MB_SETFOREGROUND);

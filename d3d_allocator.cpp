@@ -97,7 +97,7 @@ protected:
 };
 
 D3DFrameAllocator::D3DFrameAllocator() :
-    m_DecoderService(0), m_ProcessorService(0), m_hDecoder(0), m_hProcessor(0), m_Manager(0)
+    m_Manager(0), m_DecoderService(0), m_ProcessorService(0), m_hDecoder(0), m_hProcessor(0)
 {    
 }
 

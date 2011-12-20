@@ -56,12 +56,12 @@ static int GetIntelAdapterId(IDirect3D9* pd3d)
 }
 
 CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
-    m_pFrameSurfaces(NULL),
-    m_pmfxDEC(0),
-    m_nRequiredFramesNum(0),
-    m_pFrameAllocator(NULL),
     m_mfxImpl(MFX_IMPL_UNSUPPORTED),
+    m_pmfxDEC(0),
     m_pVideoParams(0),
+    m_pFrameAllocator(NULL),
+    m_pFrameSurfaces(NULL),
+    m_nRequiredFramesNum(0),
     m_pRendererD2dDeviceManager(NULL),
     m_pD3dDeviceManager(NULL),
     m_pD3dDevice(NULL)
@@ -457,6 +457,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
     ASSERT(m_pVideoParams != NULL);
     std::auto_ptr<D3DAllocatorParams> pParam(NULL);
     mfxStatus sts = MFX_ERR_NONE;
+    int adapterId = -1;
 
     // Setup allocator - HW acceleration
     if (m_bUseD3DAlloc)
@@ -518,7 +519,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             }
 
             // Find Intel adapter number - not always the default adapter
-            int adapterId = GetIntelAdapterId(pD3D);
+            adapterId = GetIntelAdapterId(pD3D);
             if (adapterId < 0)
             {
                 hr = E_FAIL;
