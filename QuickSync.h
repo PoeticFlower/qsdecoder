@@ -74,7 +74,10 @@ protected:
     virtual void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
     HRESULT HandleSubType(const GUID& subType, FOURCC fourCC);
     HRESULT CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize);
-    HRESULT DeliverSurface(mfxFrameSurface1* pSurfaceOut);
+    HRESULT QueueSurface(mfxFrameSurface1* pSurface);
+    HRESULT ProcessDecodedFrame(mfxFrameSurface1* pSurface);
+    void    ClearQueue();
+    HRESULT DeliverSurface(bool bWaitForCompletion);
     virtual void SetDeliverSurfaceCallback(void* obj, TQS_DeliverSurfaceCallback func)
     {
         CQsAutoLock cObjectLock(&m_csLock);
@@ -85,7 +88,7 @@ protected:
     virtual void GetConfig(CQsConfig* pConfig);
     virtual void SetConfig(CQsConfig* pConfig);
 
-    bool SetTimeStamp(mfxFrameSurface1* pSurface);
+    bool SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData);
     void SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo);
     mfxStatus ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN, mfxU32& nFrameRateExtD);
     mfxStatus OnVideoParamsChanged();
@@ -93,7 +96,10 @@ protected:
     inline void PushSurface(mfxFrameSurface1* pSurface);
     inline mfxFrameSurface1* PopSurface();
     void FlushOutputQueue(bool deliverFrames = true);
-    void AddBorders(mfxFrameSurface1* pSurface);
+    unsigned WorkerThreadMsgLoop();
+
+    // statics
+    static unsigned  __stdcall WorkerThreadProc(void* pThis);
 
     // data members
     bool m_OK;
@@ -105,15 +111,21 @@ protected:
     mfxU32              m_nPitch;
     CDecTimeManager     m_TimeManager;
     CFrameConstructor*  m_pFrameConstructor;
-    unsigned char*      m_OutputBuffer;
-    size_t              m_OutputBufferSize;
     size_t              m_nSegmentFrameCount; // used for debugging mostly
     volatile bool       m_bFlushing;          // like in DirectShow - current frame and data should be discarded
-    volatile bool       m_bNeedToFlush;
+    volatile bool       m_bNeedToFlush;       // a flush was seen but not handled yet
     bool                m_bForceOutput;
-    bool                m_bDvdDecoding;
+    bool                m_bDvdDecoding;       // support DVD decoding
     CQsConfig           m_Config;
+    HANDLE              m_hWorkerThread;
+    unsigned            m_WorkerThreadId;
+    volatile bool       m_WorkerThreadIsRunning;
+
+    typedef std::pair<QsFrameData, CQsAlignedBuffer*> TQsQueueItem;
+
+    CQsThreadSafeQueue<TQsQueueItem> m_ProcessedFramesQueue;       // after processing
+    CQsThreadSafeQueue<TQsQueueItem> m_FreeFramesPool;
 
     // Output frame data
-    QsFrameData m_FrameData;
+    QsFrameData m_FrameDataTemplate;
 };

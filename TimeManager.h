@@ -91,7 +91,6 @@ public:
         return (REFERENCE_TIME)(((double)t / (double)MFX_TIME_STAMP_FREQUENCY) * 1e7);
     }
 
-    void AddTimeStamp(IMediaSample* pSample);
     void AddOutputTimeStamp(mfxFrameSurface1* pSurface);
     bool CalcFrameRate(const mfxFrameSurface1* pSurface,
                        const std::deque<mfxFrameSurface1*>& queue);
@@ -106,19 +105,9 @@ public:
     static const double fps23976;
 
 protected:
-    inline void PushTimeStamp(int id, REFERENCE_TIME rtStart)
-    {
-#ifdef _DEBUG
-        TTimeStampInfo t(id, rtStart);
-        m_TimeStampQueue.push_back(t);
-#endif
-    }
-
-    REFERENCE_TIME PopTimeStamp();
     void FixFrameRate(double frameRate);
     bool CalcCurrentFrameRate(double& tmpFrameRate, size_t nQueuedFrames);
 
-//    double m_dDecodeTime;
     double m_dOrigFrameRate;
     double m_dFrameRate;
     bool   m_bValidFrameRate;
@@ -130,6 +119,5 @@ protected:
     bool   m_bIsSampleInFields;
     bool   m_bEnableIvtc;
     REFERENCE_TIME m_rtPrevStart;
-    TTimeStampQueue  m_TimeStampQueue;
     TSortedTimeStamps m_OutputTimeStamps;
 };

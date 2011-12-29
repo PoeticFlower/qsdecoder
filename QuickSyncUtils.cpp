@@ -309,13 +309,6 @@ mfxStatus DARtoPAR(mfxU32 darw, mfxU32 darh, mfxU32 w, mfxU32 h, mfxU16& parw, m
     return MFX_ERR_NONE;
 }
 
-void CopyBitstream(const mfxBitstream& src,  mfxBitstream& trg)
-{
-    memcpy(&trg, &src, sizeof(mfxBitstream));
-    trg.Data = new mfxU8[src.DataLength];
-    memcpy(trg.Data, src.Data, src.DataLength);
-}
-
 const char* GetCodecName(DWORD codec)
 {
     switch(codec)

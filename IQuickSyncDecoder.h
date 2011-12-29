@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.20 Alpha"
+#define QS_DEC_VERSION  "v0.21 Beta"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -89,12 +89,12 @@ struct CQsConfig
         unsigned codecs;
         struct
         {
-            bool  bEnableDvdDecoding : 1;
-            bool  bEnableH264        : 1;
-            bool  bEnableMPEG2       : 1;
-            bool  bEnableVC1         : 1;
-            bool  bEnableWMV9        : 1;
-            unsigned reserved2 : 27;
+            bool  bEnableDvdDecoding :  1;
+            bool  bEnableH264        :  1;
+            bool  bEnableMPEG2       :  1;
+            bool  bEnableVC1         :  1;
+            bool  bEnableWMV9        :  1;
+            unsigned reserved2       : 27;
         };
     };
 };

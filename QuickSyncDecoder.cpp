@@ -62,7 +62,7 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     m_pFrameAllocator(NULL),
     m_pFrameSurfaces(NULL),
     m_nRequiredFramesNum(0),
-    m_pRendererD2dDeviceManager(NULL),
+    m_pRendererD3dDeviceManager(NULL),
     m_pD3dDeviceManager(NULL),
     m_pD3dDevice(NULL)
 {
@@ -104,31 +104,23 @@ mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
     MSDK_CHECK_POINTER(m_pFrameSurfaces, NULL);
 
     //0.1 seconds cycle
-    for (int tries = 0; tries < 100; ++tries)
+    for (int tries = 0; tries < 1024; ++tries)
     {
-        for (mfxU8 i = 0; i < m_nRequiredFramesNum; ++i)
         {
-            if (0 == m_pFrameSurfaces[i].Data.Locked)
+            CQsAutoLock lock(&m_csLock);
+            for (mfxU8 i = 0; i < m_nRequiredFramesNum; ++i)
             {
-                // find if surface is in output queue
-                bool bInQueue = false;
-                for (size_t j = 0; j <  m_OutputSurfaceQueue.size(); ++j)
+                if (!IsSurfaceLocked(&m_pFrameSurfaces[i]))
                 {
-                    if (m_OutputSurfaceQueue[j] == &m_pFrameSurfaces[i])
-                    {
-                        bInQueue = true;
-                        break;
-                    }
-                }
-
-                // found free surface :)
-                if (!bInQueue)
+                    // found free surface :)
                     return &m_pFrameSurfaces[i];
+                }
             }
         }
 
         MSDK_TRACE("QSDcoder: FindFreeSurface - all surfaces are in use, retrying in 1ms\n");
-        Sleep(1);
+
+        Sleep(tries+1);
     }
 
     return NULL;
@@ -149,7 +141,7 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
     // Initialize frame allocator (if needed)
     sts = CreateAllocator();
     MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, sts);
-   
+
     // Find how many surfaces are needed
     mfxFrameAllocRequest allocRequest;
     MSDK_ZERO_VAR(allocRequest);
@@ -467,7 +459,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
 
         // Couldn't create our own device - probably a full screen exclusive player.
         // We'll use the supplied renderer's device manager.
-        if (m_pRendererD2dDeviceManager)
+        if (m_pRendererD3dDeviceManager)
         {
             // Get DirectX Object
             HANDLE hDevice;
@@ -477,13 +469,13 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             D3DADAPTER_IDENTIFIER9 adIdentifier;
             D3DPRESENT_PARAMETERS d3dParams = {1, 1, D3DFMT_X8R8G8B8, 1, D3DMULTISAMPLE_NONE, 0, D3DSWAPEFFECT_DISCARD, NULL, TRUE, FALSE, D3DFMT_UNKNOWN, 0, 0, D3DPRESENT_INTERVAL_IMMEDIATE};
 
-            HRESULT hr = m_pRendererD2dDeviceManager->OpenDeviceHandle(&hDevice);
+            HRESULT hr = m_pRendererD3dDeviceManager->OpenDeviceHandle(&hDevice);
             if (FAILED(hr))
             {
                 MSDK_TRACE("QsDecoder: failed to open device handle!\n");
                 goto done;
             }
-            hr = m_pRendererD2dDeviceManager->LockDevice(hDevice, &pDevice, TRUE);
+            hr = m_pRendererD3dDeviceManager->LockDevice(hDevice, &pDevice, TRUE);
             if (FAILED(hr) && NULL == pDevice)
             {
                 MSDK_TRACE("QsDecoder: failed to lock device!\n");
@@ -514,7 +506,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             // If renderer is already on Intel's GPU than we can reuse the device.
             if (adIdentifier.VendorId == 0x8086) //Intel's vendor ID  is 8086h
             {
-                m_pD3dDeviceManager = m_pRendererD2dDeviceManager;
+                m_pD3dDeviceManager = m_pRendererD3dDeviceManager;
                 goto done;
             }
 
@@ -574,10 +566,10 @@ done:
             MSDK_SAFE_RELEASE(pDevice);
             if (hDevice != NULL)
             {
-                m_pRendererD2dDeviceManager->UnlockDevice(hDevice, FALSE);
-                m_pRendererD2dDeviceManager->CloseDeviceHandle(&hDevice);
+                m_pRendererD3dDeviceManager->UnlockDevice(hDevice, FALSE);
+                m_pRendererD3dDeviceManager->CloseDeviceHandle(&hDevice);
             }
-//            m_pD3dDeviceManager = m_pRendererD2dDeviceManager;
+//            m_pD3dDeviceManager = m_pRendererD3dDeviceManager;
             sts = MFX_ERR_NONE;
         }
         else
@@ -643,9 +635,9 @@ mfxStatus CQuickSyncDecoder::UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameDat
 
 void CQuickSyncDecoder::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
 {
-    if (m_pRendererD2dDeviceManager == pDeviceManager)
+    if (m_pRendererD3dDeviceManager == pDeviceManager)
         return;
 
     MSDK_TRACE("QsDecoder: SetD3DDeviceManager called\n");
-    m_pRendererD2dDeviceManager = pDeviceManager;
+    m_pRendererD3dDeviceManager = pDeviceManager;
 }
