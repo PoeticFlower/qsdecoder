@@ -70,20 +70,75 @@ public:
     mfxStatus DecodeHeader(mfxBitstream* bs, mfxVideoParam* par);
     mfxStatus CheckHwAcceleration(mfxVideoParam* pVideoParams);
     void SetConfig(const CQsConfig& cfg) { m_Config = cfg; }
-    TSurfaceQueue* GetOutputQueue() { return &m_OutputSurfaceQueue; }
+    __forceinline TSurfaceQueue& GetOutputQueue()
+    {
+        CQsAutoLock lock(&m_csLock);
+        return m_OutputSurfaceQueue;
+    }
+    
+    __forceinline bool OutputQueueEmpty()
+    {
+        CQsAutoLock lock(&m_csLock);
+        return m_OutputSurfaceQueue.empty();
+    }
+
+    __forceinline size_t OutputQueueSize()
+    {
+        CQsAutoLock lock(&m_csLock);
+        return m_OutputSurfaceQueue.size();
+    }
+
     __forceinline void PushSurface(mfxFrameSurface1* pSurface)
     {
+        CQsAutoLock lock(&m_csLock);
         m_OutputSurfaceQueue.push_back(pSurface);
     }
 
     __forceinline mfxFrameSurface1* PopSurface()
     {
+        CQsAutoLock lock(&m_csLock);
         if (m_OutputSurfaceQueue.empty())
             return NULL;
 
         mfxFrameSurface1* pSurface = m_OutputSurfaceQueue.front();
         m_OutputSurfaceQueue.pop_front();
         return pSurface;
+    }
+
+    __forceinline void LockSurface(mfxFrameSurface1* pSurface)
+    {
+        CQsAutoLock lock(&m_csLock);
+        ASSERT(pSurface != NULL);
+
+        auto it = m_LockedSurfaces.find(pSurface);
+        if (it == m_LockedSurfaces.end())
+        {
+            m_LockedSurfaces.insert(pSurface);
+        }
+    }
+
+    __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
+    {
+        CQsAutoLock lock(&m_csLock);
+        ASSERT(pSurface != NULL);
+
+        auto it = m_LockedSurfaces.find(pSurface);
+        if (it != m_LockedSurfaces.end())
+        {
+            m_LockedSurfaces.erase(it);
+        }
+    }
+
+    bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
+    {
+        CQsAutoLock lock(&m_csLock);
+        ASSERT(pSurface != NULL);
+
+        if (0 != pSurface->Data.Locked)
+            return true;
+
+        auto it = m_LockedSurfaces.find(pSurface);
+        return it != m_LockedSurfaces.end();
     }
 
     bool IsD3DAlloc() { return m_bUseD3DAlloc; }
@@ -118,12 +173,14 @@ protected:
     bool                  m_bUseD3DAlloc;
 
     // D3D/DXVA interfaces
-    IDirect3DDeviceManager9* m_pRendererD2dDeviceManager;
+    IDirect3DDeviceManager9* m_pRendererD3dDeviceManager;
     IDirect3DDeviceManager9* m_pD3dDeviceManager; 
-
     IDirect3DDevice9*        m_pD3dDevice;
 
     TSurfaceQueue m_OutputSurfaceQueue;
+    std::set<mfxFrameSurface1*> m_LockedSurfaces;
+
+    CQsLock       m_csLock;
 
 private:
    DISALLOW_COPY_AND_ASSIGN(CQuickSyncDecoder);

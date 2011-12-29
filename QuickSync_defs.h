@@ -78,8 +78,15 @@
     _snprintf_s(msg, MSDK_ARRAY_LEN(msg), MSDK_ARRAY_LEN(msg) - 1, _format, __VA_ARGS__);  \
     OutputDebugStringA(msg);                                                               \
 }
+// MSDK_VTRACE should be used for very frequent prints
+#   ifdef VERBOSE
+#       define MSDK_VTRACE MSDK_TRACE
+#   else
+#       define MSDK_VTRACE
+#   endif
 #else
 #   define MSDK_TRACE(_format, ...)
+#   define MSDK_VTRACE(_format, ...)
 #endif
 
 // A macro to disallow the copy constructor and operator= functions

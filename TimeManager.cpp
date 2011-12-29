@@ -43,26 +43,12 @@ void CDecTimeManager::Reset()
 {
     m_nOutputFrames = -1;
     m_nSegmentSampleCount = 0;
-    m_TimeStampQueue.clear();
     m_OutputTimeStamps.clear();
     m_bValidFrameRate = false;
     m_nLastSeenFieldDoubling = 0;
     m_rtPrevStart = INVALID_REFTIME;
     m_bIsSampleInFields = false;
     SetInverseTelecine(false);
-}
-
-void CDecTimeManager::AddTimeStamp(IMediaSample* pSample)
-{
-    REFERENCE_TIME rtStart, rtStop;
-    HRESULT hr = pSample->GetTime(&rtStart, &rtStop);
-
-    if (S_OK != hr && VFW_S_NO_STOP_TIME != hr)
-    {
-        rtStart  = INVALID_REFTIME;
-    }
-
-    PushTimeStamp(m_nSegmentSampleCount++, rtStart);
 }
 
 bool CDecTimeManager::CalcFrameRate(const mfxFrameSurface1* pSurface,
@@ -188,16 +174,6 @@ void CDecTimeManager::SetInverseTelecine(bool bIvtc)
     }
 }
 
-REFERENCE_TIME CDecTimeManager::PopTimeStamp()
-{
-    if (m_TimeStampQueue.empty())
-        return INVALID_REFTIME;
-
-    TTimeStampInfo tsInfo = m_TimeStampQueue.front();
-    m_TimeStampQueue.pop_front();
-    return tsInfo.rtStart;
-}
-
 bool CDecTimeManager::GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
                                          const std::deque<mfxFrameSurface1*>& queue,
                                          REFERENCE_TIME& rtStart,
@@ -227,8 +203,6 @@ bool CDecTimeManager::GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
     }
 
     ++m_nOutputFrames;
-    if (m_TimeStampQueue.size() > 100)
-        PopTimeStamp();
 
     // Can't start the sequence - drop frame
     if (rtDecoder == INVALID_REFTIME && m_rtPrevStart == INVALID_REFTIME)
