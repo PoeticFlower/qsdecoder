@@ -77,9 +77,10 @@ struct CQsConfig
         unsigned misc;
         struct
         {
-            unsigned nOutputQueueLength :  6; // use a minimum of 8 frame for more accurate frame rate calculations
-            bool     bMod16Width        :  1;
-            unsigned reserved1          : 25;
+            unsigned nOutputQueueLength    :  6; // use a minimum of 8 frame for more accurate frame rate calculations
+            bool     bMod16Width           :  1; // image width is always modulu 16
+            bool     bEnableMultithreading :  1; // enable worker thread for low latency decode (better performance)
+            unsigned reserved1             : 24;
         };
     };
 

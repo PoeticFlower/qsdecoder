@@ -79,6 +79,8 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableVC1   = true;
     m_Config.bEnableWMV9  = true;
 
+    m_Config.bEnableMultithreading = true;
+
     // Currently not working well - menu decoding :(
     m_Config.bEnableDvdDecoding = false;
 
@@ -392,7 +394,10 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     m_FrameDataTemplate.fourCC = FOURCC_NV12;
 
     // Create worker thread
-    m_hWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &WorkerThreadProc, this, 0, &m_WorkerThreadId);
+    if (m_Config.bEnableMultithreading)
+    {
+        m_hWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &WorkerThreadProc, this, 0, &m_WorkerThreadId);
+    }
 
     // Fill free frames pool
     {
@@ -722,7 +727,8 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
 
         if (MFX_ERR_NONE == sts && deliverFrames && !m_bNeedToFlush)
         {
-            hr = QueueSurface(pSurf);
+            QueueSurface(pSurf);
+            DeliverSurface(false);
             if (FAILED(hr))
                 break;
         }
@@ -1024,8 +1030,16 @@ unsigned CQuickSync::WorkerThreadMsgLoop()
 
 HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface)
 {
-    // Post message to worker thread
-    PostThreadMessage(m_WorkerThreadId, TM_PROCESS_FRAME, (WPARAM)pSurface, 0);
+    if (m_Config.bEnableMultithreading)
+    {
+        // Post message to worker thread
+        PostThreadMessage(m_WorkerThreadId, TM_PROCESS_FRAME, (WPARAM)pSurface, 0);
+    }
+    else
+    {
+        ProcessDecodedFrame(pSurface);
+    }
+
     return S_OK;
 }
 
