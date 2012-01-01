@@ -301,7 +301,7 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, mfxFrameSurface1*& pFrame
     do
     {
         sts = m_pmfxDEC->DecodeFrameAsync(pBS, pWorkSurface, &pFrameSurface, &syncp);
-        // need 1 more work surface
+        // Need 1 more work surface
         if (MFX_ERR_MORE_SURFACE == sts)
         {
             pWorkSurface = FindFreeSurface();
@@ -633,10 +633,10 @@ mfxStatus CQuickSyncDecoder::UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameDat
     return m_pFrameAllocator->Unlock(m_pFrameAllocator, pSurface->Data.MemId, pFrameData);
 }
 
-void CQuickSyncDecoder::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
+bool CQuickSyncDecoder::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
 {
     if (m_pRendererD3dDeviceManager == pDeviceManager)
-        return;
+        return false;
 
     MSDK_TRACE("QsDecoder: SetD3DDeviceManager called\n");
     m_pRendererD3dDeviceManager = pDeviceManager;

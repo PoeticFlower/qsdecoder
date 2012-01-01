@@ -949,7 +949,11 @@ HRESULT CQuickSync::CheckCodecProfileSupport(DWORD codec, DWORD profile, DWORD l
 
 void CQuickSync::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
 {
-    m_pDecoder->SetD3DDeviceManager(pDeviceManager);
+    if (m_pDecoder->SetD3DDeviceManager(pDeviceManager) && NULL != pDeviceManager)
+    {
+        // Reset/init in this stage will cause faster initialization in benchmarks
+        m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
+    }
 }
 
 void CQuickSync::GetConfig(CQsConfig* pConfig)
