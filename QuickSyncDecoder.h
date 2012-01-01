@@ -56,7 +56,7 @@ public:
         return m_pD3dDeviceManager;
     }
 
-    void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
+    bool SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
 
     mfxStatus CreateAllocator();
     mfxStatus InitFrameAllocator(mfxVideoParam* pVideoParams, mfxU32 nPitch);
