@@ -640,4 +640,5 @@ bool CQuickSyncDecoder::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceMana
 
     MSDK_TRACE("QsDecoder: SetD3DDeviceManager called\n");
     m_pRendererD3dDeviceManager = pDeviceManager;
+    return true;
 }

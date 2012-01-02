@@ -73,7 +73,9 @@ CQuickSync::CQuickSync() :
 
     // Set default configuration - override what's not zero
     m_Config.bMod16Width = false;
-    m_Config.nOutputQueueLength = 8;
+    m_Config.bTimeStampCorrection = true;
+
+    m_Config.nOutputQueueLength = (m_Config.bTimeStampCorrection) ? 8 : 0;
     m_Config.bEnableH264  = true;
     m_Config.bEnableMPEG2 = true;
     m_Config.bEnableVC1   = true;
@@ -651,7 +653,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
 
 mfxU32 CQuickSync::PicStructToDsFlags(mfxU32 picStruct)
 {
-    if (m_TimeManager.GetInverseTelecine())
+    if (m_Config.bTimeStampCorrection && m_TimeManager.GetInverseTelecine())
     {
         return AM_VIDEO_FLAG_WEAVE;
     }
@@ -661,6 +663,11 @@ mfxU32 CQuickSync::PicStructToDsFlags(mfxU32 picStruct)
     if (picStruct == MFX_PICSTRUCT_PROGRESSIVE)
     {
         return AM_VIDEO_FLAG_WEAVE;
+    }
+    // Frame has progresive structure but might be film type as well
+    else if (picStruct & MFX_PICSTRUCT_PROGRESSIVE)
+    {
+        flags |= AM_VIDEO_FLAG_WEAVE;
     }
 
     // Top field first
@@ -841,11 +848,19 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
 
 bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData)
 {
-    if (!m_TimeManager.GetSampleTimeStamp(pSurface, m_pDecoder->GetOutputQueue(), frameData.rtStart, frameData.rtStop))
-        return false;
+    // Find corrected time stamp
+    if (m_Config.bTimeStampCorrection)
+    {
+        if (!m_TimeManager.GetSampleTimeStamp(pSurface, m_pDecoder->GetOutputQueue(), frameData.rtStart, frameData.rtStop))
+            return false;
+    
+        return frameData.rtStart >= 0;
+    }
 
-    //TODO: force BOB DI after loss of IVTC for a few frames
-    return frameData.rtStart >= 0;
+    // Just convert the time stamp from the HW decoder
+    frameData.rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
+    frameData.rtStop = (INVALID_REFTIME == frameData.rtStart) ? INVALID_REFTIME : frameData.rtStart + 1;
+    return true; // return all frames DS filter will handle this
 }
 
 mfxStatus CQuickSync::OnVideoParamsChanged()
@@ -895,7 +910,10 @@ void CQuickSync::PushSurface(mfxFrameSurface1* pSurface)
     m_pDecoder->PushSurface(pSurface);
 
     // Note - no need to lock as all API functions are already exclusive.
-    m_TimeManager.AddOutputTimeStamp(pSurface);
+    if (m_Config.bTimeStampCorrection)
+    {
+        m_TimeManager.AddOutputTimeStamp(pSurface);
+    }
 }
 
 mfxFrameSurface1* CQuickSync::PopSurface()
@@ -1053,7 +1071,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     {
         // Initial frames with invalid times are discarded
         REFERENCE_TIME rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
-        if (m_pDecoder->OutputQueueEmpty() &&  rtStart == INVALID_REFTIME)
+        if (m_pDecoder->OutputQueueEmpty() &&  rtStart == INVALID_REFTIME && m_Config.bTimeStampCorrection)
         {
             m_pDecoder->UnlockSurface(pSurface);
             return S_OK;
@@ -1062,7 +1080,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
         PushSurface(pSurface);
 
         // Not enough surfaces for proper time stamp correction
-        DWORD queueSize = (m_bDvdDecoding) ? 0 : m_Config.nOutputQueueLength;
+        size_t queueSize = (m_bDvdDecoding || !m_Config.bTimeStampCorrection) ? 0 : m_Config.nOutputQueueLength;
         if (!m_bForceOutput && m_pDecoder->OutputQueueSize() < queueSize)
         {
             return S_OK;
@@ -1108,10 +1126,9 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
         return S_OK;
     }
 
-    outFrameData.bFilm = false;
-
     // Setup interlacing info
     outFrameData.dwInterlaceFlags = PicStructToDsFlags(pSurface->Info.PicStruct);
+    outFrameData.bFilm = 0 != (outFrameData.dwInterlaceFlags & AM_VIDEO_FLAG_REPEAT_FIELD);
     
     // TODO: find actual frame type I/P/B
     // Media sample isn't reliable as it referes to an older frame!

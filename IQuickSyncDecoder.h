@@ -47,9 +47,12 @@ struct QsFrameData
         B       = 3
     };
 
-    unsigned char* y;
-    unsigned char* u;
-    unsigned char* v;
+    // 
+    union { unsigned char* y; unsigned char* red;   };
+    union { unsigned char* u; unsigned char* green; };
+    union { unsigned char* v; unsigned char* blue;  };
+    union { unsigned char* a; unsigned char* alpha; };
+
     DWORD          fourCC;
     RECT           rcFull;
     RECT           rcClip;
@@ -80,6 +83,8 @@ struct CQsConfig
             unsigned nOutputQueueLength    :  6; // use a minimum of 8 frame for more accurate frame rate calculations
             bool     bMod16Width           :  1; // image width is always modulu 16
             bool     bEnableMultithreading :  1; // enable worker thread for low latency decode (better performance)
+            bool     bTimeStampCorrection  :  1; // when true time stamp will be generated.
+                                                 // when false -> DS filter will do this. implies disabled output queue (nOutputQueueLength=0)
             unsigned reserved1             : 24;
         };
     };
