@@ -651,24 +651,28 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
     return S_OK;
 }
 
-mfxU32 CQuickSync::PicStructToDsFlags(mfxU32 picStruct)
+void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData::QsFrameStructure& frameStructure)
 {
+    // Note MSDK will never output fields
+    frameStructure = (picStruct & MFX_PICSTRUCT_PROGRESSIVE) ?
+        QsFrameData::fsProgressiveFrame :
+        QsFrameData::fsInterlacedFrame;
+
     if (m_Config.bTimeStampCorrection && m_TimeManager.GetInverseTelecine())
     {
-        return AM_VIDEO_FLAG_WEAVE;
+        flags = AM_VIDEO_FLAG_WEAVE;
+        return;
     }
 
-    mfxU32 flags = 0;
     // Progressive frame - note that sometimes interlaced content has the MFX_PICSTRUCT_PROGRESSIVE in combination with other flags
     if (picStruct == MFX_PICSTRUCT_PROGRESSIVE)
     {
-        return AM_VIDEO_FLAG_WEAVE;
+        flags = AM_VIDEO_FLAG_WEAVE;
+        return;
     }
-    // Frame has progresive structure but might be film type as well
-    else if (picStruct & MFX_PICSTRUCT_PROGRESSIVE)
-    {
-        flags |= AM_VIDEO_FLAG_WEAVE;
-    }
+
+    // Interlaced
+    flags = 0;
 
     // Top field first
     if (picStruct & MFX_PICSTRUCT_FIELD_TFF)
@@ -681,8 +685,6 @@ mfxU32 CQuickSync::PicStructToDsFlags(mfxU32 picStruct)
     {
         flags |= AM_VIDEO_FLAG_REPEAT_FIELD;
     }
-
-    return flags;
 }
 
 mfxStatus CQuickSync::ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN, mfxU32& nFrameRateExtD)
@@ -1127,7 +1129,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     }
 
     // Setup interlacing info
-    outFrameData.dwInterlaceFlags = PicStructToDsFlags(pSurface->Info.PicStruct);
+    PicStructToDsFlags(pSurface->Info.PicStruct, outFrameData.dwInterlaceFlags, outFrameData.frameStructure);
     outFrameData.bFilm = 0 != (outFrameData.dwInterlaceFlags & AM_VIDEO_FLAG_REPEAT_FIELD);
     
     // TODO: find actual frame type I/P/B

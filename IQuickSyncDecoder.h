@@ -47,23 +47,38 @@ struct QsFrameData
         B       = 3
     };
 
-    // 
+    // QsFrameStructure affects how color information is stored within a frame
+    // 4:2:0 example:
+    // fsProgressiveFrame: uv[0][0] affects y[0-1][0-1]
+    // fsInterlacedFrame   uv[0][0] affects y[0][0-1] and y[2][0-1]
+    enum QsFrameStructure
+    {
+        fsProgressiveFrame = 0,  // Note: a progressive frame can hold interlaced content
+        fsInterlacedFrame  = 1,  // Two fields
+        fsField            = 2   // Single field
+    };
+
+    // Pointers to data buffer
+    // Memory should not be freed externally!
+    // Packed UV surfaces (NV12) should use the 'u' pointer.
     union { unsigned char* y; unsigned char* red;   };
     union { unsigned char* u; unsigned char* green; };
     union { unsigned char* v; unsigned char* blue;  };
     union { unsigned char* a; unsigned char* alpha; };
 
-    DWORD          fourCC;
-    RECT           rcFull;
-    RECT           rcClip;
-    DWORD          dwStride;
-    REFERENCE_TIME rtStart, rtStop;
-    DWORD          dwInterlaceFlags; // same as dwTypeSpecificFlags (AM_SAMPLE2_PROPERTIES)
-    bool           bFilm;
-    DWORD          dwPictAspectRatioX;
-    DWORD          dwPictAspectRatioY;
-    QsFrameType    frameType;
-    bool           bReadOnly;
+    DWORD            fourCC;             // Standard fourCC codes. Limited to NV12 in this version.
+    RECT             rcFull;             // Note: these RECTs are according to WIN32 API standard (not DirectShow)
+    RECT             rcClip;             // They hold the coordinates of the top-left and bottom right pixels
+                                         // So expect values like {0, 0, 1919, 1079} for 1080p.
+    DWORD            dwStride;           // Line width + padding (in bytes). Distance between lines. Always modulu 16.
+    REFERENCE_TIME   rtStart, rtStop;    // Start and stop time stamps. Ther latter is always rtStart+1
+    DWORD            dwInterlaceFlags;   // Same as dwTypeSpecificFlags (in AM_SAMPLE2_PROPERTIES)
+    bool             bFilm;              // true only when a frame has a double field attribute (AM_VIDEO_FLAG_REPEAT_FIELD)
+    DWORD            dwPictAspectRatioX; // Display aspect ratio (NOT pixel aspect ratio)
+    DWORD            dwPictAspectRatioY;
+    QsFrameType      frameType;          // Mainly used for future capability. Will always return I.
+    QsFrameStructure frameStructure;     // See QsFrameStructure enum comments
+    bool             bReadOnly;          // If true, the frame's content can be overwritten (most likely bReadOnly will remain false forever)
 };
 
 // config for QuickSync component
