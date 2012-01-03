@@ -92,7 +92,7 @@ protected:
     void SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo);
     mfxStatus ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN, mfxU32& nFrameRateExtD);
     mfxStatus OnVideoParamsChanged();
-    mfxU32 PicStructToDsFlags(mfxU32 picStruct);
+    void PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData::QsFrameStructure& frameStructure);
     inline void PushSurface(mfxFrameSurface1* pSurface);
     inline mfxFrameSurface1* PopSurface();
     void FlushOutputQueue(bool deliverFrames = true);
