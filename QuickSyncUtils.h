@@ -137,7 +137,7 @@ public:
         m_Capacity = max(m_Queue.size(), m_Capacity);
     }
 
-    __forceinline T Pop()
+    inline T Pop()
     {
         CQsAutoLock lock(this);
         if (m_Queue.empty())
