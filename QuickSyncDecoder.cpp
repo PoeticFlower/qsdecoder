@@ -272,7 +272,7 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         case MFX_WRN_INCOMPATIBLE_VIDEO_PARAM:
             MSDK_TRACE("QsDecoder: decoder Init is successful - wrong video parameters\n");
             break;
-        defualt:
+        default:
             MSDK_TRACE("QsDecoder: decoder Init has failed!\n");
             break;
         }

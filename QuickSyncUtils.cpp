@@ -146,7 +146,10 @@ endLoop:
     return d;
 }
 
-#ifdef _DEBUG
+#ifndef _DEBUG
+#   define SetThreadName(...)
+#   define DebugAssert(...)
+#else
 #pragma pack(push, 8)
 typedef struct tagTHREADNAME_INFO
 {
@@ -165,7 +168,7 @@ void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID)
     THREADNAME_INFO info;
     info.dwType = 0x1000;
     info.szName = szThreadName;
-    info.dwThreadID = (DWORD)-1;
+    info.dwThreadID = dwThreadID;
     info.dwFlags = 0;
 
     __try
