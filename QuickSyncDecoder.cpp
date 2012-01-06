@@ -218,16 +218,23 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     {
         // flush - VC1 decoder needs this or surfaces will remain in use (bug workaround)
         // SW decoder doesn't like this :(
-        if (MFX_IMPL_SOFTWARE != QueryIMPL())
-        {
-            do
-            {
-                mfxFrameSurface1* pSurf = NULL;
-                sts = Decode(NULL, pSurf);
-            } while (sts == MFX_ERR_NONE);
-        }
+        //if (MFX_IMPL_SOFTWARE != QueryIMPL())
+        //{
+        //    do
+        //    {
+        //        mfxFrameSurface1* pSurf = NULL;
+        //        sts = Decode(NULL, pSurf);
+        //    } while (sts == MFX_ERR_NONE);
+        //}
 
         sts = m_pmfxDEC->Reset(pVideoParams);
+
+        for (int i =0; i < m_nRequiredFramesNum; ++i)
+        {
+            ASSERT (m_pFrameSurfaces[i].Data.Locked == 0);
+        }
+
+
         // need to reset the frame allocator
         if (MFX_ERR_NONE != sts)
         {
@@ -254,6 +261,21 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
 
         // Init MSDK decoder
         sts = m_pmfxDEC->Init(pVideoParams);
+        switch (sts)
+        {
+        case MFX_ERR_NONE:
+            MSDK_TRACE("QsDecoder: decoder Init is successful\n");
+            break;
+        case MFX_WRN_PARTIAL_ACCELERATION:
+            MSDK_TRACE("QsDecoder: decoder Init is successful w/o HW acceleration\n");
+            break;
+        case MFX_WRN_INCOMPATIBLE_VIDEO_PARAM:
+            MSDK_TRACE("QsDecoder: decoder Init is successful - wrong video parameters\n");
+            break;
+        defualt:
+            MSDK_TRACE("QsDecoder: decoder Init has failed!\n");
+            break;
+        }
     }
 
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);

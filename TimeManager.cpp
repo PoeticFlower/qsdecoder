@@ -357,7 +357,7 @@ void CDecTimeManager::FixFrameRate(double frameRate)
     }
 
     m_dFrameRate = frameRate;
-    MSDK_TRACE("QsDecoder: frame rate is %0.2f\n", (float)(m_dFrameRate));
+    MSDK_TRACE("QsDecoder: frame rate is %0.3f\n", (float)(m_dFrameRate));
 }
 
 bool CDecTimeManager::CalcCurrentFrameRate(double& tmpFrameRate, size_t nQueuedFrames)

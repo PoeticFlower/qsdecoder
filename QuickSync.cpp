@@ -345,7 +345,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     // Simple info header (without extra data) or DecodeHeader failed (usually not critical)
     else
     {
-        mfx.FrameInfo.CropW        = (mfxU16)vih2->bmiHeader.biWidth;
+        mfx.FrameInfo.CropW = (mfxU16)vih2->bmiHeader.biWidth;
         if (m_Config.bMod16Width)
         {
             mfx.FrameInfo.CropW = MSDK_ALIGN16(mfx.FrameInfo.CropW);
@@ -392,9 +392,6 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         m_pDecoder->SetConfig(m_Config);
     }
 
-    // This is constant
-    m_FrameDataTemplate.fourCC = FOURCC_NV12;
-
     // Create worker thread
     if (m_Config.bEnableMultithreading)
     {
@@ -403,12 +400,12 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     // Fill free frames pool
     {
-        size_t queueCapacity = 4;    
+        size_t queueCapacity = 4;
         m_FreeFramesPool.SetCapacity(queueCapacity);
         m_ProcessedFramesQueue.SetCapacity(queueCapacity);
         for (unsigned i = 0; i < queueCapacity; ++i)
         {
-            TQsQueueItem item(m_FrameDataTemplate, new CQsAlignedBuffer(0));
+            TQsQueueItem item(QsFrameData(), new CQsAlignedBuffer(0));
             m_FreeFramesPool.Push(item);
         }
     }
@@ -442,24 +439,12 @@ void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& frameInfo)
             frameInfo.AspectRatioW = frameInfo.AspectRatioH = 1;
         }
     }
-
-    // use image size as aspect ratio when PAR is 1x1
-    if (frameInfo.AspectRatioW == frameInfo.AspectRatioH)
-    {
-        m_FrameDataTemplate.dwPictAspectRatioX = alignedWidth;
-        m_FrameDataTemplate.dwPictAspectRatioY = frameInfo.CropH;
-    }
-    else
-    {
-        m_FrameDataTemplate.dwPictAspectRatioX = vih2.dwPictAspectRatioX;
-        m_FrameDataTemplate.dwPictAspectRatioY = vih2.dwPictAspectRatioY;
-    }
 }
 
 HRESULT CQuickSync::Decode(IMediaSample* pSample)
 {
     // DEBUG
-#if 0 //def _DEBUG
+#ifdef _DEBUG
     static bool isSetThreadName = false;
     if (!isSetThreadName) 
     {
@@ -761,7 +746,7 @@ void CQuickSync::FlushOutputQueue(bool deliverFrames)
     bool bForceOutputSave = m_bForceOutput;
     m_bForceOutput = deliverFrames && !m_bNeedToFlush;
 
-    // Note that m_bNeedToFlush can be changed by  another thread at any time
+    // Note that m_bNeedToFlush can be changed by another thread at any time
     if (!deliverFrames || m_bNeedToFlush)
     {
         ClearQueue();
@@ -788,10 +773,8 @@ void CQuickSync::FlushOutputQueue(bool deliverFrames)
     {
         DeliverSurface(true);
     }
-    else
-    {
-        ClearQueue();
-    }
+
+    ClearQueue();
 
     ASSERT(m_pDecoder->OutputQueueEmpty());
     ASSERT(m_ProcessedFramesQueue.Empty());
@@ -875,11 +858,9 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
     mfxFrameInfo& curInfo = m_mfxParamsVideo.mfx.FrameInfo;
     mfxFrameInfo& newInfo = params.mfx.FrameInfo;
 
-    bool bResChange = (curInfo.CropH != newInfo.CropH) || (curInfo.CropW != newInfo.CropW);
-    bool bAspectRatioChange = (curInfo.AspectRatioH != newInfo.AspectRatioH) || (curInfo.AspectRatioW != newInfo.AspectRatioW);
     bool bFrameRateChange = (curInfo.FrameRateExtN != newInfo.FrameRateExtN) ||(curInfo.FrameRateExtD != newInfo.FrameRateExtD);
 
-    if (!(bResChange || bAspectRatioChange || bFrameRateChange))
+    if (!bFrameRateChange)
         return MFX_ERR_NONE;
 
     // Copy video params
@@ -890,19 +871,8 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
     // Flush images with old parameters
     FlushOutputQueue(true);
 
-    // Calculate new size and aspect ratio
-    if (bAspectRatioChange || bResChange)
-    {
-        DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(newInfo.CropW) : newInfo.CropW;
-        PARtoDAR(newInfo.AspectRatioW, newInfo.AspectRatioH, alignedWidth, newInfo.CropH,
-            m_FrameDataTemplate.dwPictAspectRatioX, m_FrameDataTemplate.dwPictAspectRatioY);
-    }
-
-    if (bFrameRateChange)
-    {
-        double frameRate = (double)curInfo.FrameRateExtN / (double)curInfo.FrameRateExtD;
-        m_TimeManager.OnVideoParamsChanged(frameRate);
-    }
+    double frameRate = (double)curInfo.FrameRateExtN / (double)curInfo.FrameRateExtD;
+    m_TimeManager.OnVideoParamsChanged(frameRate);
 
     return MFX_ERR_NONE;
 }
@@ -1023,6 +993,10 @@ unsigned CQuickSync::WorkerThreadMsgLoop()
             return (unsigned) bRet;
         }
 
+        // Ignore WM_NULL messages
+        if (WM_NULL == msg.message)
+            continue;
+
         if (TM_PROCESS_FRAME == msg.message)
         {
             mfxFrameSurface1* pSurface = (mfxFrameSurface1*)msg.wParam;
@@ -1095,6 +1069,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
     while (m_FreeFramesPool.Empty())
     {
+        // a flush event has just occured - abort frame processing
         if (m_bNeedToFlush)
         {
             m_pDecoder->UnlockSurface(pSurface);
@@ -1108,7 +1083,11 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     QsFrameData& outFrameData     = item.first;
     CQsAlignedBuffer*& pOutBuffer = item.second;
 
-    m_FrameDataTemplate = m_FrameDataTemplate;
+    // Clear the outFrameData
+    MSDK_ZERO_VAR(outFrameData);
+
+    UpdateAspectRatio(pSurface, outFrameData);
+    outFrameData.fourCC = pSurface->Info.FourCC;
 
     if (pSurface->Data.Corrupted)
     {
@@ -1161,7 +1140,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     outFrameData.rcFull.bottom = (LONG)height - 1;
     outFrameData.rcFull.right  = MSDK_ALIGN16(pSurface->Info.CropW + pSurface->Info.CropX) - 1;
     outFrameData.rcClip.top    = 0;
-    outFrameData.rcClip.bottom = (LONG)height - 1;
+    outFrameData.rcClip.bottom = (LONG)height - 1; // Height is not padded in output buffer
 
     if (m_Config.bMod16Width)
     {
@@ -1181,7 +1160,8 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     // Mark Y, U & V pointers on output buffer
     outFrameData.y = pOutBuffer->GetBuffer() + offset;
     outFrameData.u = outFrameData.y + (pitch * height);
-    outFrameData.v = outFrameData.u + 1;
+    outFrameData.v = 0;
+    outFrameData.a = 0;
 
     // App can modify this buffer
     outFrameData.bReadOnly = false;
@@ -1213,7 +1193,10 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
 #ifdef _DEBUG
     // Debug only - mark top left corner when working with D3D
-    *((REFERENCE_TIME*)outFrameData.u) = (REFERENCE_TIME)(-1); // 4 pink pixels
+    REFERENCE_TIME mark = (m_pDecoder->IsHwAccelerated()) ? 0x80FF80FF80FF80FF : 0xFF80FF80FF80FF80;
+
+    *((REFERENCE_TIME*)outFrameData.u) = mark; // 4 blue (hw) or red (sw)
+    *((REFERENCE_TIME*)(outFrameData.u + outFrameData.dwStride)) = mark;
 #endif
 
     // Keep or drop the processed frame
@@ -1229,4 +1212,12 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     }
 
     return S_OK;
+}
+
+void CQuickSync::UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& frameData)
+{
+    mfxFrameInfo& info = pSurface->Info;
+    DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(info.CropW) : info.CropW;
+    PARtoDAR(info.AspectRatioW, info.AspectRatioH, alignedWidth, info.CropH,
+        frameData.dwPictAspectRatioX, frameData.dwPictAspectRatioY);
 }

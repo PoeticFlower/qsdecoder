@@ -90,6 +90,7 @@ protected:
 
     bool SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData);
     void SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo);
+    void UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& frameData);
     mfxStatus ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN, mfxU32& nFrameRateExtD);
     mfxStatus OnVideoParamsChanged();
     void PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData::QsFrameStructure& frameStructure);
@@ -125,7 +126,4 @@ protected:
 
     CQsThreadSafeQueue<TQsQueueItem> m_ProcessedFramesQueue;       // after processing
     CQsThreadSafeQueue<TQsQueueItem> m_FreeFramesPool;
-
-    // Output frame data
-    QsFrameData m_FrameDataTemplate;
 };

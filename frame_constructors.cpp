@@ -580,7 +580,7 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     {
         NALU_TYPE naluType = itStartCode.GetType();
 
-        // Discard audio NALUs
+        // Discard AUD NALUs
         if (NALU_TYPE_AUD == naluType)
             continue;
 
