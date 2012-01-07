@@ -72,31 +72,31 @@ public:
     void SetConfig(const CQsConfig& cfg) { m_Config = cfg; }
     __forceinline TSurfaceQueue& GetOutputQueue()
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csOutputQueueLock);
         return m_OutputSurfaceQueue;
     }
     
     __forceinline bool OutputQueueEmpty()
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csOutputQueueLock);
         return m_OutputSurfaceQueue.empty();
     }
 
     __forceinline size_t OutputQueueSize()
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csOutputQueueLock);
         return m_OutputSurfaceQueue.size();
     }
 
     __forceinline void PushSurface(mfxFrameSurface1* pSurface)
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csOutputQueueLock);
         m_OutputSurfaceQueue.push_back(pSurface);
     }
 
     __forceinline mfxFrameSurface1* PopSurface()
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csOutputQueueLock);
         if (m_OutputSurfaceQueue.empty())
             return NULL;
 
@@ -107,7 +107,7 @@ public:
 
     __forceinline void LockSurface(mfxFrameSurface1* pSurface)
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csSurfaceLock);
         ASSERT(pSurface != NULL);
 
         auto it = m_LockedSurfaces.find(pSurface);
@@ -119,7 +119,7 @@ public:
 
     __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csSurfaceLock);
         ASSERT(pSurface != NULL);
 
         auto it = m_LockedSurfaces.find(pSurface);
@@ -131,7 +131,7 @@ public:
 
     bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
     {
-        CQsAutoLock lock(&m_csLock);
+        CQsAutoLock lock(&m_csSurfaceLock);
         ASSERT(pSurface != NULL);
 
         if (0 != pSurface->Data.Locked)
@@ -170,6 +170,7 @@ protected:
     mfxFrameSurface1*     m_pFrameSurfaces;
     mfxFrameAllocResponse m_AllocResponse;
     mfxU16                m_nRequiredFramesNum;
+    int                   m_nLastSurfaceId;
     bool                  m_bUseD3DAlloc;
 
     // D3D/DXVA interfaces
@@ -180,7 +181,9 @@ protected:
     TSurfaceQueue m_OutputSurfaceQueue;
     std::set<mfxFrameSurface1*> m_LockedSurfaces;
 
-    CQsLock       m_csLock;
+    // Various locks
+    CQsLock m_csOutputQueueLock;
+    CQsLock m_csSurfaceLock;
 
 private:
    DISALLOW_COPY_AND_ASSIGN(CQuickSyncDecoder);

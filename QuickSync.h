@@ -74,7 +74,7 @@ protected:
     virtual void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
     HRESULT HandleSubType(const GUID& subType, FOURCC fourCC);
     HRESULT CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize);
-    HRESULT QueueSurface(mfxFrameSurface1* pSurface);
+    HRESULT QueueSurface(mfxFrameSurface1* pSurface, bool async);
     HRESULT ProcessDecodedFrame(mfxFrameSurface1* pSurface);
     void    ClearQueue();
     HRESULT DeliverSurface(bool bWaitForCompletion);
@@ -96,7 +96,7 @@ protected:
     void PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData::QsFrameStructure& frameStructure);
     inline void PushSurface(mfxFrameSurface1* pSurface);
     inline mfxFrameSurface1* PopSurface();
-    void FlushOutputQueue(bool deliverFrames = true);
+    void FlushOutputQueue();
     unsigned WorkerThreadMsgLoop();
 
     // statics
@@ -115,15 +115,15 @@ protected:
     size_t              m_nSegmentFrameCount; // used for debugging mostly
     volatile bool       m_bFlushing;          // like in DirectShow - current frame and data should be discarded
     volatile bool       m_bNeedToFlush;       // a flush was seen but not handled yet
-    bool                m_bForceOutput;
     bool                m_bDvdDecoding;       // support DVD decoding
     CQsConfig           m_Config;
     HANDLE              m_hWorkerThread;
     unsigned            m_WorkerThreadId;
     volatile bool       m_WorkerThreadIsRunning;
 
-    typedef std::pair<QsFrameData, CQsAlignedBuffer*> TQsQueueItem;
+    typedef std::pair<QsFrameData*, CQsAlignedBuffer*> TQsQueueItem;
 
-    CQsThreadSafeQueue<TQsQueueItem> m_ProcessedFramesQueue;       // after processing
-    CQsThreadSafeQueue<TQsQueueItem> m_FreeFramesPool;
+    CQsThreadSafeQueue<mfxFrameSurface1*> m_DecodedFramesQueue;
+    CQsThreadSafeQueue<TQsQueueItem> m_ProcessedFramesQueue; // holds frame buffers after processing
+    CQsThreadSafeQueue<TQsQueueItem> m_FreeFramesPool;       // holds free frame buffers
 };

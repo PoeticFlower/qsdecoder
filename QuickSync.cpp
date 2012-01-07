@@ -56,11 +56,13 @@ CQuickSync::CQuickSync() :
     m_nSegmentFrameCount(0),
     m_bFlushing(false),
     m_bNeedToFlush(false),
-    m_bForceOutput(false),
     m_bDvdDecoding(false),
     m_hWorkerThread(NULL),
     m_WorkerThreadId(0),
-    m_WorkerThreadIsRunning(false)
+    m_WorkerThreadIsRunning(false),
+    m_DecodedFramesQueue(4),
+    m_ProcessedFramesQueue(4),
+    m_FreeFramesPool(4)
 {
     MSDK_TRACE("QSDcoder: Constructor\n");
 
@@ -106,8 +108,12 @@ CQuickSync::~CQuickSync()
 
     while (!m_FreeFramesPool.Empty())
     {
-        TQsQueueItem item = m_FreeFramesPool.Pop();
-        delete item.second;
+        TQsQueueItem item;
+        if (m_FreeFramesPool.Pop(item, 0))
+        {
+            delete item.first;
+            delete item.second;
+        }
     }
 
     MSDK_SAFE_DELETE(m_pFrameConstructor);
@@ -273,8 +279,8 @@ HRESULT CQuickSync::CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, V
 HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 {
     MSDK_TRACE("QSDcoder: InitDecoder\n");
-
     CQsAutoLock cObjectLock(&m_csLock);
+    m_bNeedToFlush = true;
 
     VIDEOINFOHEADER2* vih2 = NULL;
     mfxStatus sts = MFX_ERR_NONE;
@@ -400,13 +406,11 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     // Fill free frames pool
     {
-        size_t queueCapacity = 4;
-        m_FreeFramesPool.SetCapacity(queueCapacity);
-        m_ProcessedFramesQueue.SetCapacity(queueCapacity);
+        size_t queueCapacity = m_FreeFramesPool.GetCapacity();
         for (unsigned i = 0; i < queueCapacity; ++i)
         {
-            TQsQueueItem item(QsFrameData(), new CQsAlignedBuffer(0));
-            m_FreeFramesPool.Push(item);
+            TQsQueueItem item(new QsFrameData, new CQsAlignedBuffer(0));
+            m_FreeFramesPool.Push(item, 0);
         }
     }
 
@@ -468,15 +472,16 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
         OnSeek(0);
     }
 
-    // Wait for worker thread to become less busy (free pool not empty)
-    while (m_FreeFramesPool.Empty())
+    // Deliver ready surfaces
+    DeliverSurface(false);
+
+    // Wait for worker thread to become less busy (decoded frames queue is not full)
+    while (!m_DecodedFramesQueue.WaitForCapacity(1))
     {
         if (m_bNeedToFlush)
         {
             return S_OK;
         }
-
-        Sleep(1);
     }
 
     MSDK_CHECK_NOT_EQUAL(m_OK, true, E_UNEXPECTED);
@@ -513,8 +518,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
         if (MFX_ERR_NONE == sts)
         {
             // Lock the surface so it will not be used by decoder->FindFreeSurface
-            m_pDecoder->LockSurface(pSurfaceOut);
-            QueueSurface(pSurfaceOut);
+            QueueSurface(pSurfaceOut, true);
             continue;
         }
         else if (MFX_ERR_MORE_DATA == sts)
@@ -544,13 +548,6 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
         }
         else if (MFX_ERR_NOT_ENOUGH_BUFFER == sts)
         {
-            MSDK_TRACE("QSDcoder: Decode MFX_ERR_NOT_ENOUGH_BUFFER\n");
-            if (!m_pDecoder->OutputQueueEmpty())
-            {
-                FlushOutputQueue(true);
-                continue;
-            }
-
             MSDK_TRACE("QSDcoder: Error - ran out of work buffers!\n");
             // This is a system malfunction!
             break;
@@ -594,7 +591,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     
     MSDK_SAFE_DELETE_ARRAY(mfxBS.Data);
 
-    // Deliver the samres we already processed
+    // Deliver what's available
     DeliverSurface(false);
     return hr;
 }
@@ -603,33 +600,40 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
 {
     MSDK_VTRACE("QSDcoder: DeliverSurface\n");
 
-    // Output a free if any are available or wait wait for one to become available if reuqested (bWaitForCompletion)
-    while (!m_ProcessedFramesQueue.Empty() ||
-        (bWaitForCompletion && m_FreeFramesPool.HasCapacity()))
-    {
-        if (!m_ProcessedFramesQueue.Empty())
-        {
-            TQsQueueItem item = m_ProcessedFramesQueue.Pop();
-            ASSERT(item.second);
-            QsFrameData& pFrameData = item.first;
+    TQsQueueItem item;
 
+    // Wait for worker thread to complete a frame (should be used only when flushing)
+    if (bWaitForCompletion)
+    {
+        while (m_FreeFramesPool.HasCapacity() || !m_DecodedFramesQueue.Empty())
+        {
+            if (m_ProcessedFramesQueue.Pop(item, 1))
+            {
+                if (!m_bNeedToFlush)
+                {
+                    QsFrameData* pFrameData = item.first;
+                    // Send the surface out - return code from dshow filter is ignored.
+                    MSDK_VTRACE("QSDcoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
+                    m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
+                }
+
+                m_FreeFramesPool.Push(item, 0); // No need to wait - we know there's room
+            }
+        }
+    }
+    else
+    {
+        while (m_ProcessedFramesQueue.Pop(item, 0))
+        {
             if (!m_bNeedToFlush)
             {
+                QsFrameData* pFrameData = item.first;
                 // Send the surface out - return code from dshow filter is ignored.
-                MSDK_VTRACE("QSDcoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData.rtStart, pFrameData.rtStop);
-                m_DeliverSurfaceCallback(m_ObjParent, &pFrameData);
+                MSDK_VTRACE("QSDcoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
+                m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
             }
 
-            m_FreeFramesPool.Push(item);
-        }
-        else
-        {
-            Sleep(1);
-        }
-
-        if (m_bNeedToFlush)
-        {
-            return S_OK;
+            m_FreeFramesPool.Push(item, 0); // No need to wait - we know there's room
         }
     }
 
@@ -707,32 +711,29 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
 
     // Recieved a BeginFlush that wasn't handled for some reason.
     // This overrides the request to output the remaining frames
-    deliverFrames = deliverFrames && !m_bNeedToFlush;
-    m_bForceOutput = deliverFrames;
+    m_bNeedToFlush = m_bNeedToFlush || !deliverFrames;
 
     // Flush internal queue
-    FlushOutputQueue(deliverFrames);
+    FlushOutputQueue();
 
-    // flush HW decoder by sending NULL bitstreams.
+    // Flush HW decoder by sending NULL bitstreams.
     while (MFX_ERR_NONE == sts || MFX_ERR_MORE_SURFACE == sts)
     {
         mfxFrameSurface1* pSurf = NULL;
         sts = m_pDecoder->Decode(NULL, pSurf);
 
-        if (MFX_ERR_NONE == sts && deliverFrames && !m_bNeedToFlush)
+        if (MFX_ERR_NONE == sts && !m_bNeedToFlush)
         {
-            QueueSurface(pSurf);
-            DeliverSurface(false);
+            QueueSurface(pSurf, false /* syncronous*/);
             if (FAILED(hr))
                 break;
         }
     }
 
     // Flush internal queue again
-    FlushOutputQueue(deliverFrames);
+    FlushOutputQueue();
     
     m_TimeManager.Reset();
-    m_bForceOutput = false;
 
     // all data has been flushed
     m_bNeedToFlush = false;
@@ -741,60 +742,46 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     return hr;
 }
 
-void CQuickSync::FlushOutputQueue(bool deliverFrames)
+void CQuickSync::FlushOutputQueue()
 {
-    bool bForceOutputSave = m_bForceOutput;
-    m_bForceOutput = deliverFrames && !m_bNeedToFlush;
-
     // Note that m_bNeedToFlush can be changed by another thread at any time
-    if (!deliverFrames || m_bNeedToFlush)
+    // Make sure worker thread has completed all it's tasks
+    if (m_bNeedToFlush)
     {
         ClearQueue();
     }
 
-    MSDK_TRACE("QSDcoder: FlushOutputQueue (deliverFrames=%s)\n", (m_bForceOutput) ? "TRUE" : "FALSE");
+    DeliverSurface(true);
 
-    while (!m_pDecoder->OutputQueueEmpty() && deliverFrames && !m_bNeedToFlush)
+    MSDK_TRACE("QSDcoder: FlushOutputQueue (deliverFrames=%s)\n", (!m_bNeedToFlush) ? "TRUE" : "FALSE");
+    for (size_t i = m_pDecoder->OutputQueueSize(); i > 0; --i)
     {
-        QueueSurface(NULL);
-        DeliverSurface(deliverFrames && !m_bNeedToFlush);
+        QueueSurface(NULL, false);
     }
 
     // Clear the internal frame queue - either failure in flushing or no need to deliver the frames.
     while (!m_pDecoder->OutputQueueEmpty())
     {
-        mfxFrameSurface1* pSurface = PopSurface();
-
         // Surface is not needed anymore
-        m_pDecoder->UnlockSurface(pSurface);
+        m_pDecoder->UnlockSurface(PopSurface());
     }
-
-    if (deliverFrames && !m_bNeedToFlush)
-    {
-        DeliverSurface(true);
-    }
-
-    ClearQueue();
 
     ASSERT(m_pDecoder->OutputQueueEmpty());
     ASSERT(m_ProcessedFramesQueue.Empty());
     ASSERT(!m_FreeFramesPool.HasCapacity());
-
-    m_bForceOutput = bForceOutputSave;
 }
 
 void CQuickSync::ClearQueue()
 {
+    TQsQueueItem item;
+    m_bNeedToFlush = true;
+
     // Loop until free frames pool is full
     while (m_FreeFramesPool.HasCapacity())
     {
-        if (m_ProcessedFramesQueue.Empty())
+        if (m_ProcessedFramesQueue.Pop(item, 1))
         {
-            Sleep(1);
-        }
-        else
-        {
-            m_FreeFramesPool.Push(m_ProcessedFramesQueue.Pop());
+            m_FreeFramesPool.Push(item, 0); // We know there's room
         }
     }
 }
@@ -810,7 +797,7 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
     m_nSegmentFrameCount = 0;
 
     // Make sure the worker thread is idle and released all released all resources
-    FlushOutputQueue(false);
+    FlushOutputQueue();
 
     if (m_pDecoder)
     {
@@ -823,7 +810,7 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
         }
         
         m_pFrameConstructor->Reset();
-        FlushOutputQueue(false);
+        FlushOutputQueue();
     }
 
     m_bNeedToFlush = false;
@@ -869,7 +856,7 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
     memcpy(&m_mfxParamsVideo, &params, sizeof(params));
 
     // Flush images with old parameters
-    FlushOutputQueue(true);
+    FlushOutputQueue();
 
     double frameRate = (double)curInfo.FrameRateExtN / (double)curInfo.FrameRateExtD;
     m_TimeManager.OnVideoParamsChanged(frameRate);
@@ -999,7 +986,8 @@ unsigned CQuickSync::WorkerThreadMsgLoop()
 
         if (TM_PROCESS_FRAME == msg.message)
         {
-            mfxFrameSurface1* pSurface = (mfxFrameSurface1*)msg.wParam;
+            mfxFrameSurface1* pSurface = NULL;  //(mfxFrameSurface1*)msg.wParam;
+            m_DecodedFramesQueue.Pop(pSurface, 0); // a frame must exist
             HRESULT hr = ProcessDecodedFrame(pSurface);
             if (FAILED(hr))
             {
@@ -1022,16 +1010,25 @@ unsigned CQuickSync::WorkerThreadMsgLoop()
     return 0;
 }
 
-HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface)
+HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
 {
-    if (m_Config.bEnableMultithreading)
+    // The surface is locked from being reused in another Decode call
+    if (NULL != pSurface)
+    {
+        m_pDecoder->LockSurface(pSurface);
+    }
+
+    if (async && m_Config.bEnableMultithreading)
     {
         // Post message to worker thread
-        PostThreadMessage(m_WorkerThreadId, TM_PROCESS_FRAME, (WPARAM)pSurface, 0);
+        m_DecodedFramesQueue.Push(pSurface, INFINITE);
+        PostThreadMessage(m_WorkerThreadId, TM_PROCESS_FRAME, 0, 0);
+        DeliverSurface(false /* don't wait*/);
     }
     else
     {
         ProcessDecodedFrame(pSurface);
+        DeliverSurface(true);
     }
 
     return S_OK;
@@ -1057,7 +1054,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
         // Not enough surfaces for proper time stamp correction
         size_t queueSize = (m_bDvdDecoding || !m_Config.bTimeStampCorrection) ? 0 : m_Config.nOutputQueueLength;
-        if (!m_bForceOutput && m_pDecoder->OutputQueueSize() < queueSize)
+        if (m_pDecoder->OutputQueueSize() < queueSize)
         {
             return S_OK;
         }
@@ -1066,21 +1063,20 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     // Get oldest surface from queue
     pSurface = PopSurface();
     MSDK_CHECK_POINTER(pSurface, S_OK); // decoder queue is empty - return without error
-
-    while (m_FreeFramesPool.Empty())
+    
+    TQsQueueItem item;
+    while (!m_FreeFramesPool.Pop(item, 1))
     {
-        // a flush event has just occured - abort frame processing
+        // A flush event has just occured - abort frame processing
         if (m_bNeedToFlush)
         {
             m_pDecoder->UnlockSurface(pSurface);
             return S_OK;
         }
-
-        Sleep(1);
     }
-    
-    TQsQueueItem item = m_FreeFramesPool.Pop();
-    QsFrameData& outFrameData     = item.first;
+
+    QsFrameData* pOutFrameData = item.first;
+    QsFrameData& outFrameData = *pOutFrameData;
     CQsAlignedBuffer*& pOutBuffer = item.second;
 
     // Clear the outFrameData
@@ -1092,6 +1088,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     if (pSurface->Data.Corrupted)
     {
         // Do something with a corrupted surface?
+        MSDK_TRACE("QQsDecoder: warning received a corrupted frame\n");
         pSurface->Data.Corrupted = pSurface->Data.Corrupted;
     }
 
@@ -1102,7 +1099,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     if (!SetTimeStamp(pSurface, outFrameData))
     {
         // Return frame to free pool
-        m_FreeFramesPool.Push(item);
+        m_FreeFramesPool.Push(item, 0);
         m_pDecoder->UnlockSurface(pSurface);
         return S_OK;
     }
@@ -1203,12 +1200,12 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     if (!m_bNeedToFlush)
     {
         // Enter result in the processed queue
-        m_ProcessedFramesQueue.Push(item);
+        m_ProcessedFramesQueue.Push(item, 0);
     }
     else
     {
         // Return to free pool
-        m_FreeFramesPool.Push(item);
+        m_FreeFramesPool.Push(item, 0);
     }
 
     return S_OK;

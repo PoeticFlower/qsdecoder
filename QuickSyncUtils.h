@@ -54,11 +54,11 @@ class CQsLock
     friend class CQsAutoLock;
     friend class CQsAutoUnlock;
 public:
-    CQsLock()     { InitializeCriticalSection(&m_CritSec); }
-    ~CQsLock()    { DeleteCriticalSection(&m_CritSec); }
+    CQsLock()  { InitializeCriticalSection(&m_CritSec); }
+    ~CQsLock() { DeleteCriticalSection(&m_CritSec); }
 
 private:
-    // Lock and Unlock are private nad can only be called from
+    // Lock and Unlock are private and can only be called from
     // the CQsAutoLock/CQsAutoUnlock classes
     __forceinline void Lock()   { EnterCriticalSection(&m_CritSec); }
     __forceinline void Unlock() { LeaveCriticalSection(&m_CritSec); }
@@ -66,6 +66,46 @@ private:
     // Make copy constructor and assignment operator inaccessible
     DISALLOW_COPY_AND_ASSIGN(CQsLock)
     CRITICAL_SECTION m_CritSec;
+};
+
+class QsEvent
+{
+public:
+    QsEvent(bool bSignaled = true, bool bManual = true)
+    {
+        m_hEvent = CreateEvent(NULL, (BOOL)bManual, (BOOL)bSignaled, NULL);
+#ifdef _DEBUG
+        m_bState = bSignaled;
+#endif
+    }
+
+    inline void SetState(bool bSignaled)
+    {
+        if (bSignaled)
+        {
+            SetEvent(m_hEvent);
+        }
+        else
+        {
+            ResetEvent(m_hEvent);
+        }
+#ifdef _DEBUG
+        m_bState = bSignaled;
+#endif
+    }
+
+    bool Wait(DWORD dwMilliseconds = INFINITE)
+    {
+        return WAIT_OBJECT_0 == WaitForSingleObject(m_hEvent, dwMilliseconds);
+    }
+
+    ~QsEvent() { if (m_hEvent) { CloseHandle(m_hEvent); } }
+
+private:
+    HANDLE m_hEvent;
+#ifdef _DEBUG
+    bool m_bState;
+#endif
 };
 
 // Locks a critical section, and unlocks it automatically
@@ -120,7 +160,10 @@ private:
 template<class T> class CQsThreadSafeQueue : public CQsLock
 {
 public:
-    CQsThreadSafeQueue() : m_Capacity(0)
+    CQsThreadSafeQueue(size_t capacity) :
+      m_Capacity(capacity),
+          m_NotEmptyEvent(false),
+          m_CapacityEvent(true)
     {
     }
 
@@ -130,34 +173,59 @@ public:
         CQsAutoLock lock(this);
     }
 
-    __forceinline void Push(const T& item)
+    bool Push(const T& item, DWORD dwMiliSecs)
     {
-        CQsAutoLock lock(this);
-        m_Queue.push_back(item);
-        m_Capacity = max(m_Queue.size(), m_Capacity);
+        if (dwMiliSecs > 0 && !WaitForCapacity(dwMiliSecs))
+            return false; // timeout
+        {
+            CQsAutoLock lock(this);
+
+            // Not empty anymore
+            m_NotEmptyEvent.SetState(true);
+            m_Queue.push_back(item);
+
+            // check new size
+            size_t size = m_Queue.size();
+
+            // Out of capacity
+            if (size == m_Capacity)
+            {
+                m_CapacityEvent.SetState(false);
+            }
+        }
+        return true;
     }
 
-    inline T Pop()
+    inline bool Pop(T& res, DWORD dwMiliSecs)
     {
-        CQsAutoLock lock(this);
-        if (m_Queue.empty())
-            return T();
+        if (dwMiliSecs > 0 && !WaitForNotEmpty(dwMiliSecs))
+            return false;
+        {
+            CQsAutoLock lock(this);
+            if (m_Queue.empty())
+                return false;
 
-        T res = m_Queue.front();
-        m_Queue.pop_front();
-        return res;
+            res = m_Queue.front();
+            m_Queue.pop_front();
+
+            // check new size
+            size_t size = m_Queue.size();
+            if (size == 0)
+            {
+                m_NotEmptyEvent.SetState(false);
+            }
+            else if (size == m_Capacity - 1)
+            {
+                m_CapacityEvent.SetState(true);
+            }
+        }
+        return true;
     }
 
     __forceinline size_t Size()
     {
         CQsAutoLock lock(this);
         return m_Queue.size();
-    }
-
-    __forceinline void SetCapacity(size_t capacity)
-    {
-        CQsAutoLock lock(this);
-        m_Capacity = max(capacity, m_Capacity);
     }
 
     __forceinline size_t GetCapacity()
@@ -178,9 +246,23 @@ public:
         return m_Queue.empty();
     }
 
+    inline bool WaitForCapacity(DWORD dwMiliSecs)
+    {
+        // must not lock!
+        return m_CapacityEvent.Wait(dwMiliSecs);
+    }
+
+    inline bool WaitForNotEmpty(DWORD dwMiliSecs)
+    {
+        // must not lock!
+        return m_NotEmptyEvent.Wait(dwMiliSecs);
+    }
+
 private:
     std::deque<T> m_Queue;
-    size_t m_Capacity;
+    const size_t m_Capacity;
+    QsEvent m_NotEmptyEvent;
+    QsEvent m_CapacityEvent;
 };
 
 // Simple SSE friendly buffer class
