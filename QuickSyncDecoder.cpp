@@ -62,6 +62,7 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     m_pFrameAllocator(NULL),
     m_pFrameSurfaces(NULL),
     m_nRequiredFramesNum(0),
+    m_nLastSurfaceId(0),
     m_pRendererD3dDeviceManager(NULL),
     m_pD3dDeviceManager(NULL),
     m_pD3dDevice(NULL)
@@ -102,25 +103,30 @@ CQuickSyncDecoder::~CQuickSyncDecoder()
 mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
 {
     MSDK_CHECK_POINTER(m_pFrameSurfaces, NULL);
+#ifdef _DEBUG
+    static int s_SleepCount = 0;
+#endif
 
     //0.1 seconds cycle
     for (int tries = 0; tries < 1024; ++tries)
     {
         {
-            CQsAutoLock lock(&m_csLock);
-            for (mfxU8 i = 0; i < m_nRequiredFramesNum; ++i)
+            for (int i = (m_nLastSurfaceId + 1) % m_nRequiredFramesNum; i != m_nLastSurfaceId;)
             {
                 if (!IsSurfaceLocked(&m_pFrameSurfaces[i]))
                 {
                     // found free surface :)
+                    m_nLastSurfaceId = (++m_nLastSurfaceId) % m_nRequiredFramesNum;
                     return &m_pFrameSurfaces[i];
                 }
+
+                i = (++i) % m_nRequiredFramesNum;
             }
         }
 
-        MSDK_TRACE("QSDcoder: FindFreeSurface - all surfaces are in use, retrying in 1ms\n");
+        MSDK_TRACE("QSDcoder: FindFreeSurface - all surfaces are in use, retrying in 1ms (%d)\n", ++s_SleepCount);
 
-        Sleep(tries+1);
+        Sleep(1);
     }
 
     return NULL;
@@ -148,9 +154,9 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
     sts = m_pmfxDEC->QueryIOSurf(pVideoParams, &allocRequest);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
+    MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
     allocRequest.NumFrameSuggested = (mfxU16)m_Config.nOutputQueueLength + allocRequest.NumFrameSuggested + 1;
     allocRequest.NumFrameMin = allocRequest.NumFrameSuggested;
-    MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
 
     // decide memory type
     allocRequest.Type = MFX_MEMTYPE_EXTERNAL_FRAME | MFX_MEMTYPE_FROM_DECODE;
