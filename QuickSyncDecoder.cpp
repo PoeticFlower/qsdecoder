@@ -56,6 +56,7 @@ static int GetIntelAdapterId(IDirect3D9* pd3d)
 }
 
 CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
+    m_mfxVideoSession(NULL),
     m_mfxImpl(MFX_IMPL_UNSUPPORTED),
     m_pmfxDEC(0),
     m_pVideoParams(0),
@@ -75,29 +76,46 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
 
     // Uncomment for SW emulation
     //impl = MFX_IMPL_SOFTWARE;
-   
-    sts = m_mfxVideoSession.Init(impl, &m_ApiVersion);
-    if (MFX_ERR_NONE != sts)
-    {
-        MSDK_TRACE("QsDecoder: failed to initialize MSDK session!\n");
-        return;
-    }
 
-    m_mfxVideoSession.QueryIMPL(&m_mfxImpl);
-    m_mfxVideoSession.QueryVersion(&m_ApiVersion);
-
-    m_bHwAcceleration = m_mfxImpl != MFX_IMPL_SOFTWARE;
-    m_bUseD3DAlloc = m_bHwAcceleration;
-    m_pmfxDEC = new MFXVideoDECODE(m_mfxVideoSession);
+    sts = InitSession(impl);
 }
+
 
 CQuickSyncDecoder::~CQuickSyncDecoder()
 {
-    MSDK_SAFE_DELETE(m_pmfxDEC);
+    CloseSession();
 
     FreeFrameAllocator();
     delete m_pFrameAllocator;
     CloseD3D();
+}
+
+mfxStatus CQuickSyncDecoder::InitSession(mfxIMPL impl)
+{
+    if (m_mfxVideoSession != NULL)
+        return MFX_ERR_NONE;
+
+    m_mfxVideoSession = new MFXVideoSession;
+    mfxStatus sts = m_mfxVideoSession->Init(impl, &m_ApiVersion);
+    if (MFX_ERR_NONE != sts)
+    {
+        MSDK_TRACE("QsDecoder: failed to initialize MSDK session!\n");
+        return sts;
+    }
+
+    m_mfxVideoSession->QueryIMPL(&m_mfxImpl);
+    m_mfxVideoSession->QueryVersion(&m_ApiVersion);
+
+    m_bHwAcceleration = m_mfxImpl != MFX_IMPL_SOFTWARE;
+    m_bUseD3DAlloc = m_bHwAcceleration;
+    m_pmfxDEC = new MFXVideoDECODE((mfxSession)*m_mfxVideoSession);
+    return MFX_ERR_NONE;
+}
+
+void CQuickSyncDecoder::CloseSession()
+{
+    MSDK_SAFE_DELETE(m_pmfxDEC);
+    MSDK_SAFE_DELETE(m_mfxVideoSession);
 }
 
 mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
@@ -222,32 +240,29 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     // reset decoder
     if (bInited)
     {
-        // flush - VC1 decoder needs this or surfaces will remain in use (bug workaround)
-        // SW decoder doesn't like this :(
-        //if (MFX_IMPL_SOFTWARE != QueryIMPL())
-        //{
-        //    do
-        //    {
-        //        mfxFrameSurface1* pSurf = NULL;
-        //        sts = Decode(NULL, pSurf);
-        //    } while (sts == MFX_ERR_NONE);
-        //}
-
-        sts = m_pmfxDEC->Reset(pVideoParams);
+        MFXVideoSession* saveSession = m_mfxVideoSession;
+        m_mfxVideoSession = NULL;
+        CloseSession();
+        sts = InitSession(m_mfxImpl);
+        delete saveSession;
+        MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
+        if (m_bUseD3DAlloc)
+        {
+            m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, m_pD3dDeviceManager);
+            // Note - setting the session allocator can be done only once (per session)!
+            sts = m_mfxVideoSession->SetFrameAllocator(m_pFrameAllocator);
+            if (sts != MFX_ERR_NONE)
+            {
+                MSDK_TRACE("QSDcoder: Session SetFrameAllocator failed!\n");    
+            }
+        }
 
         for (int i =0; i < m_nRequiredFramesNum; ++i)
         {
-            ASSERT (m_pFrameSurfaces[i].Data.Locked == 0);
+            m_pFrameSurfaces[i].Data.Locked = 0;
         }
 
-
-        // need to reset the frame allocator
-        if (MFX_ERR_NONE != sts)
-        {
-            m_pmfxDEC->Close();
-            FreeFrameAllocator();
-            bInited = false;
-        }
+        bInited = false;
     }
 
     // Full init
@@ -344,7 +359,7 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, mfxFrameSurface1*& pFrame
     // Wait for the asynch decoding to finish
     if (MFX_ERR_NONE == sts) 
     {
-        sts = m_mfxVideoSession.SyncOperation(syncp, 0xFFFF);
+        sts = m_mfxVideoSession->SyncOperation(syncp, 0xFFFF);
     }
 
     return sts;
@@ -438,7 +453,10 @@ void CQuickSyncDecoder::CloseD3D()
 {
     if (m_bUseD3DAlloc)
     {
-        m_mfxVideoSession.SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, NULL);
+        if (m_mfxVideoSession)
+        {
+            m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, NULL);
+        }
 
         if (m_pD3dDevice)
         {
@@ -611,7 +629,7 @@ done:
             return sts;
         }
 
-        m_mfxVideoSession.SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, m_pD3dDeviceManager);
+        m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, m_pD3dDeviceManager);
 
         pParam.reset(new D3DAllocatorParams);
         pParam->pManager = m_pD3dDeviceManager;
@@ -628,8 +646,8 @@ done:
     sts = m_pFrameAllocator->Init(pParam.get());
     if (sts == MFX_ERR_NONE)
     {
-        // Note - setting the seesion allocator can be done only once!
-        sts = m_mfxVideoSession.SetFrameAllocator(m_pFrameAllocator);
+        // Note - setting the session allocator can be done only once per session!
+        sts = m_mfxVideoSession->SetFrameAllocator(m_pFrameAllocator);
         if (sts != MFX_ERR_NONE)
         {
             MSDK_TRACE("QSDcoder: Session SetFrameAllocator failed!\n");    

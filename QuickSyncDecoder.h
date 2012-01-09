@@ -150,16 +150,18 @@ public:
 protected:
     mfxStatus         InternalReset(mfxVideoParam* pVideoParams, mfxU32 nPitch, bool bInited);
     mfxFrameSurface1* FindFreeSurface();
+    mfxStatus         InitSession(mfxIMPL impl);
+    void              CloseSession();
     mfxStatus         InitD3D();
     void              CloseD3D();
 
 // data members
     // session
-    MFXVideoSession m_mfxVideoSession;
-    mfxVersion      m_ApiVersion;
-    mfxIMPL         m_mfxImpl;
-    CQsConfig       m_Config;
-    bool            m_bHwAcceleration;
+    MFXVideoSession* m_mfxVideoSession;
+    mfxVersion       m_ApiVersion;
+    mfxIMPL          m_mfxImpl;
+    CQsConfig        m_Config;
+    bool             m_bHwAcceleration;
 
     // Decoder
     MFXVideoDECODE* m_pmfxDEC;

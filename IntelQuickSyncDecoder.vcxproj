@@ -176,7 +176,7 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <StringPooling>true</StringPooling>
-      <EnablePREfast>false</EnablePREfast>
+      <EnablePREfast>true</EnablePREfast>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
@@ -235,6 +235,8 @@
     <ClInclude Include="base_allocator.h" />
     <ClInclude Include="CodecInfo.h" />
     <ClInclude Include="H264Nalu.h" />
+    <ClInclude Include="QsThreadPool.h" />
+    <ClInclude Include="QsWorkerThread.h" />
     <ClInclude Include="QuickSyncDecoder.h" />
     <ClInclude Include="d3d_allocator.h" />
     <ClInclude Include="IQuickSyncDecoder.h" />
@@ -249,6 +251,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="base_alllocator.cpp" />
+    <ClCompile Include="QsThreadPool.cpp" />
+    <ClCompile Include="QsWorkerThread.cpp" />
     <ClCompile Include="QuickSyncExports.cpp" />
     <ClCompile Include="H264Nalu.cpp" />
     <ClCompile Include="QuickSyncDecoder.cpp" />

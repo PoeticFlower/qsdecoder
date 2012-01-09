@@ -2,7 +2,11 @@
 //
 #include "resource.h"
 /////////////////////////////////////////////////////////////////////////////
-#if !defined(AFX_RESOURCE_DLL)
+// English (United States) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -10,8 +14,8 @@
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,22,0,0
- PRODUCTVERSION 0,22,0,0
+ FILEVERSION 0,23,0,0
+ PRODUCTVERSION 0,23,0,0
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -28,13 +32,13 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Intel Corp."
             VALUE "FileDescription", "IntelQuickSyncDecoder DLL"
-            VALUE "FileVersion", "0.22 Beta"
+            VALUE "FileVersion", "0.23 Beta"
             VALUE "InternalName", "IntelQuickSyncDecoder"
             VALUE "LegalCopyright", "BSD lisence. © 2012 Intel ® Corp."
             VALUE "LegalTrademarks", "Intel QuickSync"
             VALUE "OriginalFilename", "IntelQuickSyncDecoder.dll"
             VALUE "ProductName", "IntelQuickSyncDecoder"
-            VALUE "ProductVersion", "0.22 Beta"
+            VALUE "ProductVersion", "0.23 Beta"
         END
     END
     BLOCK "VarFileInfo"
@@ -68,7 +72,7 @@ END
 
 #endif    // APSTUDIO_INVOKED
 
-#endif    // Hebrew (Israel) resources
+#endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
 
 

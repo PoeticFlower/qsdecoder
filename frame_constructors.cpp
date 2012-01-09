@@ -196,7 +196,7 @@ void CFrameConstructor::StripDvdPacket(BYTE*& p, int& len)
     { // MEDIATYPE_*_PACK
         len -= 14;
         p += 14;
-        if(int stuffing = (p[-1]&7))
+        if (int stuffing = (p[-1]&7))
         {
             len -= stuffing;
             p += stuffing;
@@ -240,7 +240,7 @@ void CFrameConstructor::StripDvdPacket(BYTE*& p, int& len)
         }
         else
         { // mpeg1
-            if((*p&0xc0) == 0x40)
+            if ((*p&0xc0) == 0x40)
             {
                 len -= 2;
                 p += 2;
@@ -268,7 +268,7 @@ void CFrameConstructor::StripDvdPacket(BYTE*& p, int& len)
             }
         }
 
-        if(ps1)
+        if (ps1)
         {
             len--;
             p++;
@@ -281,7 +281,7 @@ void CFrameConstructor::StripDvdPacket(BYTE*& p, int& len)
         }
     }
 
-    if(len < 0)
+    if (len < 0)
     {
         ASSERT(len < 0);
         len = 0;
@@ -320,19 +320,6 @@ void CFrameConstructor::WriteSampleData(mfxU8*& pData, const mfxU8* pSrc, size_t
 CVC1FrameConstructor::CVC1FrameConstructor() :
     m_FourCC(0), m_Width(0), m_Height(0)
 {
-}
-
-void CVC1FrameConstructor::Reset()
-{
-    if (m_FourCC == FOURCC_WMV3)
-    {
-        CFrameConstructor::Reset();
-        return;
-    }
-
-    bool bHeaderInitialized = m_bSeqHeaderInserted;
-    CFrameConstructor::Reset();
-    m_bSeqHeaderInserted = bHeaderInitialized;
 }
 
 mfxStatus CVC1FrameConstructor::ConstructHeaders(
@@ -528,7 +515,7 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
         nNalDataLen = itStartCode.GetDataLength(); 
         pNalDataBuff = itStartCode.GetDataBuffer();
 
-        switch(itStartCode.GetType())
+        switch (itStartCode.GetType())
         {
         case NALU_TYPE_SPS:
         case NALU_TYPE_PPS: 

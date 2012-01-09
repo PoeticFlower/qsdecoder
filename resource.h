@@ -2,7 +2,10 @@
 // Microsoft Visual C++ generated include file.
 // Used by IntelQuickSyncDecoder.rc
 //
-#define VS_VERSION_INFO                 1
+
+#define VS_VERSION_INFO                     1
+#define LANG_ENGLISH                     0x09
+#define SUBLANG_ENGLISH_US               0x01    // English (USA)
 
 // Next default values for new objects
 // 

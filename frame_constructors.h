@@ -61,7 +61,6 @@ public:
     CVC1FrameConstructor();
     mfxStatus ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS);
     mfxStatus ConstructHeaders(VIDEOINFOHEADER2* vih, const GUID& guidFormat, size_t nMtSize, size_t nVideoInfoSize);
-    void Reset();
 
 protected:
     mfxStatus ConstructHeaderSM(mfxU8* pHeaderSM, mfxU32 nHeaderSize, mfxU8* pDataBuffer, mfxU32 nDataSize);
