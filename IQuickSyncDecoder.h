@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.22 Beta"
+#define QS_DEC_VERSION  "v0.23 Beta"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -79,6 +79,7 @@ struct QsFrameData
     QsFrameType      frameType;          // Mainly used for future capability. Will always return I.
     QsFrameStructure frameStructure;     // See QsFrameStructure enum comments
     bool             bReadOnly;          // If true, the frame's content can be overwritten (most likely bReadOnly will remain false forever)
+    bool             bCorrupted;         // If true, the HW decoder reported corruption in this frame
 };
 
 // config for QuickSync component
@@ -100,7 +101,8 @@ struct CQsConfig
             bool     bEnableMultithreading :  1; // enable worker thread for low latency decode (better performance)
             bool     bTimeStampCorrection  :  1; // when true time stamp will be generated.
                                                  // when false -> DS filter will do this. implies disabled output queue (nOutputQueueLength=0)
-            unsigned reserved1             : 24;
+            bool     nEnableMtCopy         :  1;
+            unsigned reserved1             : 23;
         };
     };
 

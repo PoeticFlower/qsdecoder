@@ -32,6 +32,7 @@
 #include "CodecInfo.h"
 #include "TimeManager.h"
 #include "QuickSyncUtils.h"
+#include "QsThreadPool.h"
 #include "frame_constructors.h"
 #include "QuickSyncDecoder.h"
 #include "QuickSync.h"
@@ -84,9 +85,10 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableWMV9  = true;
 
     m_Config.bEnableMultithreading = true;
+    m_Config.nEnableMtCopy = true;
 
     // Currently not working well - menu decoding :(
-    m_Config.bEnableDvdDecoding = false;
+    //m_Config.bEnableDvdDecoding = true;
 
     m_OK = (sts == MFX_ERR_NONE);
 }
@@ -104,6 +106,13 @@ CQuickSync::~CQuickSync()
     {
         PostThreadMessage(m_WorkerThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(m_hWorkerThread, INFINITE);
+        CloseHandle(m_hWorkerThread);
+    }
+
+    // Create global thread pool
+    if (m_Config.nEnableMtCopy)
+    {
+        CQsThreadPool::DestroyThreadPool();
     }
 
     while (!m_FreeFramesPool.Empty())
@@ -404,6 +413,12 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         m_hWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &WorkerThreadProc, this, 0, &m_WorkerThreadId);
     }
 
+    // Create global thread pool
+    if (m_Config.nEnableMtCopy)
+    {
+        CQsThreadPool::CreateThreadPool();
+    }
+
     // Fill free frames pool
     {
         size_t queueCapacity = m_FreeFramesPool.GetCapacity();
@@ -534,7 +549,6 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             if (!flushed)
             {
                 sts = OnVideoParamsChanged();
-//                Flush(true);
                 flushed = true;
             }
 
@@ -935,7 +949,7 @@ void CQuickSync::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
     if (m_pDecoder->SetD3DDeviceManager(pDeviceManager) && NULL != pDeviceManager)
     {
         // Reset/init in this stage will cause faster initialization in benchmarks
-        m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
+//        m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
     }
 }
 
@@ -1085,6 +1099,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     UpdateAspectRatio(pSurface, outFrameData);
     outFrameData.fourCC = pSurface->Info.FourCC;
 
+    outFrameData.bCorrupted = 0 != pSurface->Data.Corrupted;
     if (pSurface->Data.Corrupted)
     {
         // Do something with a corrupted surface?
@@ -1163,24 +1178,16 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     // App can modify this buffer
     outFrameData.bReadOnly = false;
 
-        // Source is D3D9 surface
-    if (m_pDecoder->IsD3DAlloc())
-    {
-        // Copy Y
-        gpu_memcpy(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
+    Tmemcpy memcpyFunc = (m_pDecoder->IsD3DAlloc()) ?
+        ( (m_Config.nEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy ) :
+        ( (m_Config.nEnableMtCopy) ? mt_memcpy     : memcpy );
 
-        // Copy UV
-        gpu_memcpy(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
-    }
-    // Source is system memory
-    else
-    {
-        // Copy Y
-        memcpy(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
+    // Copy Y
+    //gpu_memcpy(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
+    memcpyFunc(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
 
-        // Copy UV
-        memcpy(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
-    }
+    // Copy UV
+    memcpyFunc(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
 
     // Unlock the frame
     m_pDecoder->UnlockFrame(pSurface, &frameData);

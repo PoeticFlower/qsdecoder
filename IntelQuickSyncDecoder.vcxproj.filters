@@ -12,6 +12,18 @@
     <Filter Include="Resource Files">
       <UniqueIdentifier>{0a386d10-f3de-44fa-855a-fa02aa8f04c8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Allocators">
+      <UniqueIdentifier>{d0d35276-a574-4006-bb70-9350604f3e2c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Allocators">
+      <UniqueIdentifier>{a0e0c84e-fde0-4d98-873b-2a47cf08f555}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Utility">
+      <UniqueIdentifier>{28809b95-8c9e-4592-81f1-af707618bdcc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Utility">
+      <UniqueIdentifier>{9bc60ada-7b15-4dad-83d7-50c78f406f4e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -23,15 +35,6 @@
     <ClInclude Include="frame_constructors.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="base_allocator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="d3d_allocator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="sysmem_allocator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="QuickSync_defs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -39,9 +42,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="QuickSyncDecoder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="QuickSyncUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="H264Nalu.h">
@@ -56,6 +56,24 @@
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="base_allocator.h">
+      <Filter>Header Files\Allocators</Filter>
+    </ClInclude>
+    <ClInclude Include="sysmem_allocator.h">
+      <Filter>Header Files\Allocators</Filter>
+    </ClInclude>
+    <ClInclude Include="d3d_allocator.h">
+      <Filter>Header Files\Allocators</Filter>
+    </ClInclude>
+    <ClInclude Include="QuickSyncUtils.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="QsWorkerThread.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="QsThreadPool.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -67,19 +85,7 @@
     <ClCompile Include="frame_constructors.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="base_alllocator.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="d3d_allocator.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="sysmem_allocator.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="QuickSyncDecoder.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="QuickSyncUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="H264Nalu.cpp">
@@ -90,6 +96,24 @@
     </ClCompile>
     <ClCompile Include="QuickSyncExports.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sysmem_allocator.cpp">
+      <Filter>Source Files\Allocators</Filter>
+    </ClCompile>
+    <ClCompile Include="d3d_allocator.cpp">
+      <Filter>Source Files\Allocators</Filter>
+    </ClCompile>
+    <ClCompile Include="base_alllocator.cpp">
+      <Filter>Source Files\Allocators</Filter>
+    </ClCompile>
+    <ClCompile Include="QsThreadPool.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="QsWorkerThread.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="QuickSyncUtils.cpp">
+      <Filter>Source Files\Utility</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

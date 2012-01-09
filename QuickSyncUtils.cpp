@@ -29,10 +29,10 @@
 #include "stdafx.h"
 #include "QuickSync_defs.h"
 #include "CodecInfo.h"
+#include "QuickSyncUtils.h"
+#include "QsThreadPool.h"
 
-static bool CheckForSSE41();
 
-static const bool s_SSE4_1_enabled = CheckForSSE41();
 
 // gpu_memcpy is a memcpy style function that copied data very fast from a
 // GPU tiled memory (write back)
@@ -40,6 +40,7 @@ static const bool s_SSE4_1_enabled = CheckForSSE41();
 //  optimally use a 2K offset between them.
 void* gpu_memcpy(void* d, const void* s, size_t size)
 {
+    static bool s_SSE4_1_enabled = CheckForSSE41();
     if (d == NULL || s == NULL) return NULL;
 
     //if memory is not aligned, use memcpy
@@ -146,10 +147,6 @@ endLoop:
     return d;
 }
 
-#ifndef _DEBUG
-#   define SetThreadName(...)
-#   define DebugAssert(...)
-#else
 #pragma pack(push, 8)
 typedef struct tagTHREADNAME_INFO
 {
@@ -181,6 +178,7 @@ void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID)
     }
 } 
 
+#ifdef _DEBUG
 void DebugAssert(const TCHAR* pCondition,const TCHAR* pFileName, int iLine)
 {
     TCHAR szInfo[2048];
@@ -314,7 +312,7 @@ mfxStatus DARtoPAR(mfxU32 darw, mfxU32 darh, mfxU32 w, mfxU32 h, mfxU16& parw, m
 
 const char* GetCodecName(DWORD codec)
 {
-    switch(codec)
+    switch (codec)
     {
     case MFX_CODEC_AVC:   return "AVC";
     case MFX_CODEC_MPEG2: return "MPEG2";
@@ -326,10 +324,10 @@ const char* GetCodecName(DWORD codec)
 
 const char* GetProfileName(DWORD codec, DWORD profile)
 {
-    switch(codec)
+    switch (codec)
     {
     case MFX_CODEC_AVC:
-        switch(profile)
+        switch (profile)
         {
         case QS_PROFILE_H264_BASELINE:             return "Baseline";
         case QS_PROFILE_H264_CONSTRAINED_BASELINE: return "Constrained Baseline";
@@ -350,7 +348,7 @@ const char* GetProfileName(DWORD codec, DWORD profile)
         break;
 
     case MFX_CODEC_MPEG2:
-        switch(profile)
+        switch (profile)
         {
         case QS_PROFILE_MPEG2_422:                return "4:2:2";
         case QS_PROFILE_MPEG2_HIGH:               return "High";
@@ -362,7 +360,7 @@ const char* GetProfileName(DWORD codec, DWORD profile)
         break;
 
     case MFX_CODEC_VC1:
-        switch(profile)
+        switch (profile)
         {
         case QS_PROFILE_VC1_SIMPLE:   return "Simple";
         case QS_PROFILE_VC1_MAIN:     return "Main";
@@ -377,10 +375,101 @@ const char* GetProfileName(DWORD codec, DWORD profile)
     return "Unknown";
 }
 
-static bool CheckForSSE41()
+bool CheckForSSE41()
 {
    int CPUInfo[4];
     __cpuid(CPUInfo, 1);
 
     return 0 != (CPUInfo[2] & (1<<19)); //19th bit of 2nd reg means sse4.1 is enabled
+}
+
+size_t GetCoreCount()
+{
+    static size_t s_CoreCount = 0;
+
+    if (0 == s_CoreCount)
+    {
+        int CPUInfo[4];
+        __cpuid(CPUInfo, 1);
+
+        size_t coreCount = ((CPUInfo[1] >> 17) & 0xff);
+        s_CoreCount = max(1, min(QS_MAX_CPU_CORES, coreCount));
+    }
+
+    return s_CoreCount;    
+}
+
+#define MIN_BUFF_SIZE (1<<16)
+
+class CQsMtCopy : public IQsTask
+{
+public:
+    CQsMtCopy(void* d, const void* s, size_t size, size_t taskCount, Tmemcpy func = &memcpy) : m_Dest(d), m_Src(s), m_Func(func), m_nTaskCount(taskCount)
+    {
+        MSDK_ZERO_VAR(m_Offsets);
+        size_t blockSize = size / taskCount;
+        blockSize &= ~15; //make size a multiple of 16 bytes
+
+        size_t offset = 0;
+        for (size_t i = 0; i < taskCount; ++i)
+        {
+            m_Offsets[i] = offset;
+            offset += blockSize;
+        }
+        m_Offsets[taskCount] = size;
+    }
+
+    virtual HRESULT RunTask(size_t taskId)
+    {
+        ASSERT(m_Func != NULL);
+        const char* s = (const char*)m_Src  + m_Offsets[taskId];
+        char* d = (char*)m_Dest + m_Offsets[taskId];
+        size_t size = m_Offsets[taskId + 1] - m_Offsets[taskId];
+        m_Func(d, s, size);
+        return S_OK;
+    }
+
+    virtual size_t TaskCount()
+    {
+        return m_nTaskCount;
+    }
+
+private:
+    void* m_Dest;
+    const void* m_Src;
+    Tmemcpy m_Func;
+    size_t m_Offsets[QS_MAX_CPU_CORES + 1];
+    size_t m_nTaskCount;
+};
+
+void* mt_memcpy(void* d, const void* s, size_t size)
+{
+    MSDK_CHECK_POINTER(d, NULL);
+    MSDK_CHECK_POINTER(s, NULL);
+
+    // buffer is very small and not worth the effort
+    if (size < MIN_BUFF_SIZE)
+    {
+        return memcpy(d, s, size);
+    }
+
+    CQsMtCopy task(d, s, size, 2, memcpy);
+    CQsThreadPool::Run(&task);
+    return d;
+}
+
+void* mt_gpu_memcpy(void* d, const void* s, size_t size)
+{
+    MSDK_CHECK_POINTER(d, NULL);
+    MSDK_CHECK_POINTER(s, NULL);
+
+    // buffer is very small and not worth the effort
+    if (size < MIN_BUFF_SIZE)
+    {
+        return memcpy(d, s, size);
+    }
+
+    CQsMtCopy task(d, s, size, 2, gpu_memcpy);
+    CQsThreadPool::Run(&task);
+    return d;
 }

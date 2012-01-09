@@ -28,8 +28,14 @@
 
 #pragma once
 
+// Forward declarations
+class CQsWorkerThread;
+
 // SSE4.1 based memcpy that copies from video memory to system memory
 void* gpu_memcpy(void* d, const void* s, size_t _size);
+void* mt_memcpy(void* d, const void* s, size_t size);
+void* mt_gpu_memcpy(void* d, const void* s, size_t size);
+
 // Finds greatest common divider
 mfxU32 GCD(mfxU32 a, mfxU32 b);
 // Pixel Aspect Ratio to Display Aspect Ratio conversion
@@ -41,12 +47,24 @@ const char* GetCodecName(DWORD codec);
 // Name of codec's profile - profile identifier is accoding to DirectShow
 const char* GetProfileName(DWORD codec, DWORD profile);
 
-#ifdef _DEBUG
+bool CheckForSSE41();
+size_t GetCoreCount();
+
 // Set current thread name in VS debugger
 void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID = -1 /* current thread */);
+
+#ifdef _DEBUG
 // Print assert to debugger output
 void DebugAssert(const TCHAR *pCondition,const TCHAR *pFileName, int iLine);
 #endif
+
+typedef void* (*Tmemcpy)(void*, const void*, size_t);
+
+struct IQsTask
+{
+    virtual HRESULT RunTask(size_t taskId) = 0;
+    virtual size_t TaskCount() = 0;
+};
 
 // Wrapper for low level critical section
 class CQsLock
@@ -56,6 +74,17 @@ class CQsLock
 public:
     CQsLock()  { InitializeCriticalSection(&m_CritSec); }
     ~CQsLock() { DeleteCriticalSection(&m_CritSec); }
+    __forceinline bool IsLocked()
+    {
+        if (TryEnterCriticalSection(&m_CritSec))
+        {
+            // Not locked
+            LeaveCriticalSection(&m_CritSec);
+            return false;
+        }
+
+        return true;
+    }
 
 private:
     // Lock and Unlock are private and can only be called from
@@ -68,10 +97,10 @@ private:
     CRITICAL_SECTION m_CritSec;
 };
 
-class QsEvent
+class CQsEvent
 {
 public:
-    QsEvent(bool bSignaled = true, bool bManual = true)
+    CQsEvent(bool bSignaled = true, bool bManual = true)
     {
         m_hEvent = CreateEvent(NULL, (BOOL)bManual, (BOOL)bSignaled, NULL);
 #ifdef _DEBUG
@@ -99,7 +128,7 @@ public:
         return WAIT_OBJECT_0 == WaitForSingleObject(m_hEvent, dwMilliseconds);
     }
 
-    ~QsEvent() { if (m_hEvent) { CloseHandle(m_hEvent); } }
+    ~CQsEvent() { if (m_hEvent) { CloseHandle(m_hEvent); } }
 
 private:
     HANDLE m_hEvent;
@@ -261,8 +290,8 @@ public:
 private:
     std::deque<T> m_Queue;
     const size_t m_Capacity;
-    QsEvent m_NotEmptyEvent;
-    QsEvent m_CapacityEvent;
+    CQsEvent m_NotEmptyEvent;
+    CQsEvent m_CapacityEvent;
 };
 
 // Simple SSE friendly buffer class
@@ -285,4 +314,46 @@ public:
 private:
     size_t m_BufferSize;
     BYTE* m_Buffer;
+};
+
+class CQsTimer
+{
+public:
+    CQsTimer()
+    {
+        LARGE_INTEGER freq;
+        QueryPerformanceFrequency(&freq);
+        m_Frequency = freq.QuadPart;
+
+        // Calibration
+        Start();
+        Stop();
+
+        m_Correction = m_Stop.QuadPart - m_Start.QuadPart;
+    }
+
+    __forceinline void Start()
+    {
+        // Ensure we will not be interrupted by any other thread for a while
+        Sleep(0);
+        QueryPerformanceCounter(&m_Start);
+    }
+
+    __forceinline void Stop()
+    {
+        QueryPerformanceCounter(&m_Stop);
+    }
+
+    __forceinline double GetDuration() const
+    {
+        return (double)(m_Stop.QuadPart - m_Start.QuadPart - m_Correction) * 1000000.0 / m_Frequency;
+    }
+
+
+protected:
+	LARGE_INTEGER m_Start;
+	LARGE_INTEGER m_Stop;
+
+	LONGLONG m_Frequency;
+	LONGLONG m_Correction;
 };

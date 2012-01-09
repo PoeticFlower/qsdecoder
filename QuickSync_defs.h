@@ -133,3 +133,5 @@
 #   define MFX_HANDLE_D3D9_DEVICE_MANAGER MFX_HANDLE_DIRECT3D_DEVICE_MANAGER9
 #endif
 
+//maximum amount of threads supported
+#define QS_MAX_CPU_CORES 8

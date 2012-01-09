@@ -10,6 +10,7 @@
 
 #include <tchar.h>
 #include <stdio.h>
+#include <process.h>
 
 // Platform SDK
 #include <d3d9.h>
