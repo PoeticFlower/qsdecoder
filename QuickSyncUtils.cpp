@@ -173,9 +173,13 @@ void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID)
         #define MS_VC_EXCEPTION 0x406D1388
         RaiseException(MS_VC_EXCEPTION, 0, sizeof(info)/sizeof(DWORD), (ULONG_PTR*)&info);
     }
+// Disable static analysis warnings about this code
+#pragma warning(push)
+#pragma warning(disable: 6312 6322)
     __except(EXCEPTION_CONTINUE_EXECUTION)
     {
     }
+#pragma warning(pop)
 } 
 
 #ifdef _DEBUG
