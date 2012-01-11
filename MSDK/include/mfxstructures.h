@@ -95,7 +95,12 @@ enum {
     MFX_CHROMAFORMAT_MONOCHROME =0,
     MFX_CHROMAFORMAT_YUV420     =1,
     MFX_CHROMAFORMAT_YUV422     =2,
-    MFX_CHROMAFORMAT_YUV444     =3
+    MFX_CHROMAFORMAT_YUV444     =3,
+    MFX_CHROMAFORMAT_YUV400     = MFX_CHROMAFORMAT_MONOCHROME,
+    MFX_CHROMAFORMAT_YUV411     = 4,
+    MFX_CHROMAFORMAT_YUV422H    = MFX_CHROMAFORMAT_YUV422,
+    MFX_CHROMAFORMAT_YUV422V    = 5
+    
 };
 
 enum {
@@ -215,6 +220,11 @@ typedef struct {
             mfxU16  ExtendedPicStruct;
             mfxU16 TimeStampCalc;
             mfxU16  reserved2[10];
+        };
+        struct {   /* JPEG Decoding Options */
+            mfxU16  JPEGChromaFormat;
+            mfxU16  Rotation;
+            mfxU16  reserved3[11];
         };
     };
 } mfxInfoMFX;

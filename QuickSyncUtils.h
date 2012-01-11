@@ -351,9 +351,9 @@ public:
 
 
 protected:
-	LARGE_INTEGER m_Start;
-	LARGE_INTEGER m_Stop;
+    LARGE_INTEGER m_Start;
+    LARGE_INTEGER m_Stop;
 
-	LONGLONG m_Frequency;
-	LONGLONG m_Correction;
+    LONGLONG m_Frequency;
+    LONGLONG m_Correction;
 };
