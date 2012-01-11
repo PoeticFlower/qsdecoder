@@ -32,8 +32,6 @@
 #include "QuickSyncUtils.h"
 #include "QsThreadPool.h"
 
-
-
 // gpu_memcpy is a memcpy style function that copied data very fast from a
 // GPU tiled memory (write back)
 // Performance tip: page offset (12 lsb) of both addresses should be different
@@ -43,7 +41,7 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
     static bool s_SSE4_1_enabled = CheckForSSE41();
     if (d == NULL || s == NULL) return NULL;
 
-    //if memory is not aligned, use memcpy
+    // If memory is not aligned, use memcpy
     bool isAligned = (((size_t)(s) | (size_t)(d)) & 0xF) == 0;
     if (!(isAligned && s_SSE4_1_enabled))
     {
@@ -57,17 +55,17 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
     __m128i* pTrgEnd = pTrg + ((size - reminder) >> 4);
     __m128i* pSrc = (__m128i*)s;
     
-    // make sure source is synced - doesn't hurt if not needed.
+    // Make sure source is synced - doesn't hurt if not needed.
     _mm_sfence();
 
-// split main loop to 32 and 64 bit code
+// Split main loop to 32 and 64 bit code
 // 64 doesn't have inline assembly and assembly code is faster.
-// TODO: write a pure ASM function for the 64 bit verrsion.
+// TODO: write a pure ASM function for the 64 bit version.
 #ifdef _M_X64 
     while (pTrg < pTrgEnd)
     {
-        // Emits the Streaming SIMD Extensions 4 (SSE4.1) instruction movntdqa
-        // fastest method for copying GPU RAM. Availble since Penryn (45nm Core 2 Dou/Quad)
+        // Emits the Streaming SIMD Extensions 4 (SSE4.1) instruction MOVNTDQA
+        // fastest method for copying GPU RAM. Available since Penryn (45nm Core 2 Duo/Quad)
         pTrg[0] = _mm_stream_load_si128(&pSrc[0]);
         pTrg[1] = _mm_stream_load_si128(&pSrc[1]);
         pTrg[2] = _mm_stream_load_si128(&pSrc[2]);
@@ -79,7 +77,7 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
         pSrc += 8;
         pTrg += 8;
     }
-#else // end of 64 bit code
+#else // End of 64 bit code / start of 32 bit code
     __asm
     {
         mov ecx, pSrc;
@@ -116,9 +114,9 @@ endLoop:
     pTrg = pTrgEnd;
     pSrc += (size - reminder) >> 4;
 
-#endif // end of 32 bit code
+#endif // End of 32 bit code
 
-    // copy in 16 byte steps
+    // Copy in 16 byte steps
     if (reminder >= 16)
     {
         size = reminder;
@@ -130,7 +128,7 @@ endLoop:
         }
     }
 
-    // copy last bytes
+    // Copy last bytes
     if (reminder)
     {
         __m128i temp = _mm_stream_load_si128(pSrc + end);
