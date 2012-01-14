@@ -131,7 +131,7 @@ public:
         size_t i = pSurface - m_pFrameSurfaces;
         ASSERT(i < m_nRequiredFramesNum);
 
-        if (i >=0 && i < m_nRequiredFramesNum)
+        if (i < m_nRequiredFramesNum)
         {
             if (0 > InterlockedDecrement(&m_LockedSurfaces[i]))
             {
