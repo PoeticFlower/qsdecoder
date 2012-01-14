@@ -47,10 +47,13 @@ EXTERN_GUID(WMMEDIASUBTYPE_WMV3,
 DEFINE_GUID(WMMEDIASUBTYPE_WVC1_PDVD,
 0xD979F77B, 0xDBEA, 0x4BF6, 0x9E, 0x6D, 0x1D, 0x7E, 0x57, 0xFB, 0xAD, 0x53);
 
+#define QUEUE_LENGTH 2
+
 ////////////////////////////////////////////////////////////////////
 //                      CQuickSync
 ////////////////////////////////////////////////////////////////////
 CQuickSync::CQuickSync() :
+    m_bInitialized(false),
     m_nPitch(0),
     m_pFrameConstructor(NULL),
     m_nSegmentFrameCount(0),
@@ -59,9 +62,9 @@ CQuickSync::CQuickSync() :
     m_bDvdDecoding(false),
     m_hProcessorWorkerThread(NULL),
     m_ProcessorWorkerThreadId(0),
-    m_DecodedFramesQueue(4),
-    m_ProcessedFramesQueue(4),
-    m_FreeFramesPool(4)
+    m_DecodedFramesQueue(QUEUE_LENGTH),
+    m_ProcessedFramesQueue(QUEUE_LENGTH),
+    m_FreeFramesPool(QUEUE_LENGTH)
 {
     MSDK_TRACE("QSDcoder: Constructor\n");
 
@@ -86,7 +89,7 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableMultithreading = true;
     m_Config.bEnableMtProcessing = m_Config.bEnableMultithreading;
     m_Config.bEnableMtDecode     = m_Config.bEnableMultithreading;
-    //m_Config.bEnableMtCopy = true;
+    m_Config.bEnableMtCopy       = m_Config.bEnableMultithreading;
 
     // Currently not working well - menu decoding :(
     //m_Config.bEnableDvdDecoding = true;
@@ -293,6 +296,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     MSDK_TRACE("QSDcoder: InitDecoder\n");
     CQsAutoLock cObjectLock(&m_csLock);
     m_bNeedToFlush = true;
+    m_bInitialized = true;
 
     VIDEOINFOHEADER2* vih2 = NULL;
     mfxStatus sts = MFX_ERR_NONE;
@@ -402,19 +406,23 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     SetAspectRatio(*vih2, mfx.FrameInfo);
 
-    // Create worker thread
+    // Disable MT features if main flag is off
     m_Config.bEnableMtProcessing = m_Config.bEnableMtProcessing && m_Config.bEnableMultithreading;
-    m_Config.bEnableMtDecode     = m_Config.bEnableMtDecode     && m_Config.bEnableMultithreading;
+    m_Config.bEnableMtDecode     = m_Config.bEnableMtDecode     && m_Config.bEnableMtProcessing; // This feature relies on bEnableMtProcessing
+    m_Config.bEnableMtCopy       = m_Config.bEnableMtCopy       && m_Config.bEnableMultithreading;
 
+    // Create worker thread
     if (m_Config.bEnableMtProcessing)
     {
         m_hProcessorWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &ProcessorWorkerThreadProc, this, 0, &m_ProcessorWorkerThreadId);
+        //SetThreadPriority(m_hProcessorWorkerThread, THREAD_PRIORITY_HIGHEST);
     }
 
     // Create global thread pool
     if (m_Config.bEnableMtCopy)
     {
         CQsThreadPool::CreateThreadPool();
+        //CQsThreadPool::SetThreadPoolPriority(THREAD_PRIORITY_HIGHEST);
     }
 
     // Fill free frames pool
@@ -497,7 +505,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     DeliverSurface(false);
 
     // Wait for worker thread to become less busy (decoded frames queue is not full)
-    while (!m_DecodedFramesQueue.WaitForCapacity(1))
+    while (!m_DecodedFramesQueue.WaitForCapacity(10))
     {
         if (m_bNeedToFlush)
         {
@@ -635,7 +643,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
     {
         while (m_FreeFramesPool.HasCapacity() || !m_DecodedFramesQueue.Empty())
         {
-            if (m_ProcessedFramesQueue.PopFront(item, 1))
+            if (m_ProcessedFramesQueue.PopFront(item, 10))
             {
                 if (!m_bNeedToFlush)
                 {
@@ -651,7 +659,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
     }
     else
     {
-        while (m_ProcessedFramesQueue.PopFront(item, 0))
+        while (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait use what's ready*/))
         {
             if (!m_bNeedToFlush)
             {
@@ -810,7 +818,7 @@ void CQuickSync::ClearQueue()
     // Loop until free frames pool is full
     while (m_FreeFramesPool.HasCapacity())
     {
-        if (m_ProcessedFramesQueue.PopFront(item, 1))
+        if (m_ProcessedFramesQueue.PopFront(item, 10))
         {
             m_FreeFramesPool.PushBack(item, 0); // We know there's room
         }
@@ -983,6 +991,9 @@ void CQuickSync::SetConfig(CQsConfig* pConfig)
     if (NULL == pConfig)
         return;
 
+    if (m_bInitialized)
+        return;
+
     m_Config = *pConfig;
 }
 
@@ -1025,11 +1036,6 @@ unsigned CQuickSync::ProcessorWorkerThreadMsgLoop()
                 bRet = -1;
                 break;
             }
-        }
-        else
-        {
-            TranslateMessage(&msg); 
-            DispatchMessage(&msg);
         }
     }
 
@@ -1092,7 +1098,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     MSDK_CHECK_POINTER(pSurface, S_OK); // decoder queue is empty - return without error
     
     TQsQueueItem item;
-    while (!m_FreeFramesPool.PopFront(item, 1))
+    while (!m_FreeFramesPool.PopFront(item, 10))
     {
         // A flush event has just occured - abort frame processing
         if (m_bNeedToFlush)
@@ -1189,7 +1195,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
     // App can modify this buffer
     outFrameData.bReadOnly = false;
-
+#if 1 // use this disable actual copying for benchmarking
     Tmemcpy memcpyFunc = (m_pDecoder->IsD3DAlloc()) ?
         ( (m_Config.bEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy ) :
         ( (m_Config.bEnableMtCopy) ? mt_memcpy     : memcpy );
@@ -1199,7 +1205,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
     // Copy UV
     memcpyFunc(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
-
+#endif
     // Unlock the frame
     m_pDecoder->UnlockFrame(pSurface, &frameData);
 

@@ -36,6 +36,7 @@ class CQsWorkerThread
 public:
     enum TState
     {
+        stUninitialized,
         stQuit,
         stReady,
         stRunTask,
@@ -47,6 +48,8 @@ public:
         CQsEvent& workStartedEvent, CQsEvent& workFinishedEvent);
     ~CQsWorkerThread();
     void SetState(TState state);
+    TState GetState() { return m_State;  }
+
     DWORD Run();
     void OnProcessBlock();
     __forceinline void* GetBlock();
@@ -63,7 +66,7 @@ private:
     unsigned     m_ThreadID;
     HANDLE       m_hThread;
 
-    TState m_State;
+    volatile TState m_State;
     IQsTask* m_pTask; //current task
 
     // Thread pool resources

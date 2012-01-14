@@ -98,13 +98,13 @@ struct CQsConfig
         {
             unsigned nOutputQueueLength    :  6; // use a minimum of 8 frame for more accurate frame rate calculations
             bool     bMod16Width           :  1; // image width is always modulu 16
-            bool     bEnableMultithreading :  1; // enable worker thread for low latency decode (better performance)
+            bool     bEnableMultithreading :  1; // enable worker threads for low latency decode (better performance, more power)
             bool     bTimeStampCorrection  :  1; // when true time stamp will be generated.
                                                  // when false -> DS filter will do this. implies disabled output queue (nOutputQueueLength=0)
-            bool     bEnableMtCopy         :  1;
-            bool     bEnableMtDecode       :  1;
-            bool     bEnableMtProcessing   :  1;
-            unsigned reserved1             : 21;
+            bool     bEnableMtCopy         :  1; // enables MT frame copy
+            bool     bEnableMtDecode       :  1; // decode on a worker thread
+            bool     bEnableMtProcessing   :  1; // perform post decode processing on another thread
+            unsigned reserved1             : 20;
         };
     };
 

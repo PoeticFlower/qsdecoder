@@ -135,14 +135,14 @@ private:
 class CQsAutoLock
 {
 public:
-    CQsAutoLock(CQsLock* plock)
+    __forceinline CQsAutoLock(CQsLock* plock)
     {
         m_pLock = plock;
         if (m_pLock != NULL)
             m_pLock->Lock();
     }
 
-    ~CQsAutoLock()
+    __forceinline ~CQsAutoLock()
     {
         if (m_pLock != NULL)
             m_pLock->Unlock();
@@ -158,14 +158,14 @@ private:
 class CQsAutoUnlock
 {
 public:
-    CQsAutoUnlock(CQsLock* plock)
+    __forceinline CQsAutoUnlock(CQsLock* plock)
     {
         m_pLock = plock;
         if (m_pLock != NULL)
             m_pLock->Unlock();
     }
 
-    ~CQsAutoUnlock()
+    __forceinline ~CQsAutoUnlock()
     {
         if (m_pLock != NULL)
             m_pLock->Lock();
@@ -184,8 +184,9 @@ template<class T> class CQsThreadSafeQueue : public CQsLock
 public:
     CQsThreadSafeQueue(size_t capacity) :
       m_Capacity(capacity),
-          m_NotEmptyEvent(false),
-          m_CapacityEvent(true)
+      m_Size(0),
+      m_NotEmptyEvent(false),
+      m_CapacityEvent(true)
     {
     }
 
@@ -199,18 +200,17 @@ public:
     {
         if (dwMiliSecs > 0 && !WaitForCapacity(dwMiliSecs))
             return false; // timeout
+
         {
             CQsAutoLock lock(this);
+            ++m_Size;
 
             // Not empty anymore
             m_NotEmptyEvent.Unlock();
             m_Queue.push_back(item);
 
-            // check new size
-            size_t size = m_Queue.size();
-
             // Out of capacity
-            if (size == m_Capacity)
+            if (m_Size == m_Capacity)
             {
                 m_CapacityEvent.Lock();
             }
@@ -222,15 +222,17 @@ public:
     {
         if (dwMiliSecs > 0 && !WaitForNotEmpty(dwMiliSecs))
             return false;
+
         {
             CQsAutoLock lock(this);
-            if (m_Queue.empty())
+            if (m_Size == 0)
                 return false;
 
+            --m_Size;
             res = m_Queue.front();
             m_Queue.pop_front();
 
-            // check new size
+            // Check new size
             size_t size = m_Queue.size();
             if (size == 0)
             {
@@ -247,8 +249,7 @@ public:
 
     __forceinline size_t Size()
     {
-        CQsAutoLock lock(this);
-        return m_Queue.size();
+        return m_Size;
     }
 
     __forceinline size_t GetCapacity()
@@ -260,7 +261,7 @@ public:
     __forceinline bool HasCapacity()
     {
         CQsAutoLock lock(this);
-        return m_Queue.size() < m_Capacity;
+        return m_Size < m_Capacity;
     }
     
     __forceinline bool Empty()
@@ -284,6 +285,7 @@ public:
 private:
     std::deque<T> m_Queue;
     const size_t m_Capacity;
+    volatile size_t m_Size;
     CQsEvent m_NotEmptyEvent;
     CQsEvent m_CapacityEvent;
 };

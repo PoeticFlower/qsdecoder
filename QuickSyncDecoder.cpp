@@ -120,6 +120,8 @@ mfxStatus CQuickSyncDecoder::InitSession(mfxIMPL impl)
     m_bHwAcceleration = m_mfxImpl != MFX_IMPL_SOFTWARE;
     m_bUseD3DAlloc = m_bHwAcceleration;
     m_pmfxDEC = new MFXVideoDECODE((mfxSession)*m_mfxVideoSession);
+
+    MSDK_ZERO_MEMORY((void*)&m_LockedSurfaces, sizeof(m_LockedSurfaces));
     return MFX_ERR_NONE;
 }
 
@@ -136,15 +138,15 @@ mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
     static int s_SleepCount = 0;
 #endif
 
-    //0.1 seconds cycle
-    for (int tries = 0; tries < 1024; ++tries)
+    // 1 second cycle
+    for (int tries = 0; tries < 1000; ++tries)
     {
         {
             for (int i = (m_nLastSurfaceId + 1) % m_nRequiredFramesNum; i != m_nLastSurfaceId;)
             {
                 if (!IsSurfaceLocked(&m_pFrameSurfaces[i]))
                 {
-                    // found free surface :)
+                    // Found free surface :)
                     m_nLastSurfaceId = (++m_nLastSurfaceId) % m_nRequiredFramesNum;
                     return &m_pFrameSurfaces[i];
                 }
@@ -154,7 +156,6 @@ mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
         }
 
         MSDK_TRACE("QSDcoder: FindFreeSurface - all surfaces are in use, retrying in 1ms (%d)\n", ++s_SleepCount);
-
         Sleep(1);
     }
 
@@ -248,8 +249,8 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     if (m_Config.bEnableMtDecode && m_hDecoderWorkerThread == NULL)
     {
         m_hDecoderWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &DecoderWorkerThreadProc, this, 0, &m_DecoderWorkerThreadId);
+//        SetThreadPriority(m_hDecoderWorkerThread, THREAD_PRIORITY_HIGHEST);
     }
-
 
     if (NULL == m_pFrameAllocator)
     {
@@ -279,6 +280,7 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         for (int i =0; i < m_nRequiredFramesNum; ++i)
         {
             m_pFrameSurfaces[i].Data.Locked = 0;
+            m_LockedSurfaces[i] = 0;
         }
 
         bInited = false;
@@ -767,11 +769,6 @@ unsigned CQuickSyncDecoder::DecoderWorkerThreadMsgLoop()
             }
 
             m_AsyncDecodeInfo.lock.Unlock();
-        }
-        else
-        {
-            TranslateMessage(&msg); 
-            DispatchMessage(&msg);
         }
     }
 

@@ -44,7 +44,7 @@ CQsThreadPool::CQsThreadPool() :
     s_nRefCount = 1;
 
     MSDK_ZERO_VAR(m_pThreads);
-    m_nThreadCount = m_nRunningThreadsCount = GetCoreCount();
+    m_nThreadCount = m_nRunningThreadsCount = 2; //GetCoreCount();
 
     // Allocate all worker threads
     for (size_t i = 0; i < m_nThreadCount; ++i)
@@ -151,13 +151,13 @@ HRESULT CQsThreadPool::doRun(IQsTask* pTask)
 
 void CQsThreadPool::OnThreadFinished()
 {
-    //last worker thread
+    // Last worker thread
     if (0 == InterlockedDecrement(&m_nRunningThreadsCount))
     {
         m_WorkStartedEvent.Lock();
         m_WorkFinishedEvent.Unlock();
     }
-    //other worker threads
+    // Other worker threads
     else
     {
         m_WorkFinishedEvent.Wait(INFINITE);

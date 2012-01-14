@@ -105,6 +105,7 @@ protected:
 
     // data members
     bool m_OK;
+    bool m_bInitialized;
     void* m_ObjParent;
     TQS_DeliverSurfaceCallback m_DeliverSurfaceCallback;
     CQsLock             m_csLock;
