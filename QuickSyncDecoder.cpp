@@ -257,33 +257,49 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         bInited = false;
     }
 
-    // reset decoder
+    // Reset decoder
     if (bInited)
     {
-        MFXVideoSession* saveSession = m_mfxVideoSession;
-        m_mfxVideoSession = NULL;
-        CloseSession();
-        sts = InitSession(m_mfxImpl);
-        delete saveSession;
-        MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
-        if (m_bUseD3DAlloc)
+        // Kill the session for VC1 only (workaround)
+        // Doing this for MPEG2 will cause issues like aspect ratio change will not be detected.
+        if (pVideoParams->mfx.CodecId == MFX_CODEC_VC1 && pVideoParams->mfx.CodecProfile == MFX_PROFILE_VC1_ADVANCED)
         {
-            m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, m_pD3dDeviceManager);
-            // Note - setting the session allocator can be done only once (per session)!
-            sts = m_mfxVideoSession->SetFrameAllocator(m_pFrameAllocator);
-            if (sts != MFX_ERR_NONE)
+            MFXVideoSession* saveSession = m_mfxVideoSession; // kill the old session later so MSDK DLL will not unload
+            m_mfxVideoSession = NULL;
+            CloseSession();
+            sts = InitSession(m_mfxImpl);
+            delete saveSession;
+            MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
+            if (m_bUseD3DAlloc)
             {
-                MSDK_TRACE("QSDcoder: Session SetFrameAllocator failed!\n");    
+                m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, m_pD3dDeviceManager);
+                // Note - setting the session allocator can be done only once (per session)!
+                sts = m_mfxVideoSession->SetFrameAllocator(m_pFrameAllocator);
+                if (sts != MFX_ERR_NONE)
+                {
+                    MSDK_TRACE("QSDcoder: Session SetFrameAllocator failed!\n");    
+                }
+            }
+
+            for (int i = 0; i < m_nRequiredFramesNum; ++i)
+            {
+                m_pFrameSurfaces[i].Data.Locked = 0;
+                m_LockedSurfaces[i] = 0;
+            }
+
+            bInited = false;
+        }
+        else
+        {
+            sts = m_pmfxDEC->Reset(pVideoParams);
+            // need to reset the frame allocator
+            if (MFX_ERR_NONE != sts)
+            {
+                m_pmfxDEC->Close();
+                FreeFrameAllocator();
+                bInited = false;
             }
         }
-
-        for (int i =0; i < m_nRequiredFramesNum; ++i)
-        {
-            m_pFrameSurfaces[i].Data.Locked = 0;
-            m_LockedSurfaces[i] = 0;
-        }
-
-        bInited = false;
     }
 
     // Full init
