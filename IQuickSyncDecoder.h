@@ -101,8 +101,10 @@ struct CQsConfig
             bool     bEnableMultithreading :  1; // enable worker thread for low latency decode (better performance)
             bool     bTimeStampCorrection  :  1; // when true time stamp will be generated.
                                                  // when false -> DS filter will do this. implies disabled output queue (nOutputQueueLength=0)
-            bool     nEnableMtCopy         :  1;
-            unsigned reserved1             : 23;
+            bool     bEnableMtCopy         :  1;
+            bool     bEnableMtDecode       :  1;
+            bool     bEnableMtProcessing   :  1;
+            unsigned reserved1             : 21;
         };
     };
 

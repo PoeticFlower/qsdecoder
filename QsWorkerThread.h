@@ -56,7 +56,7 @@ public:
     
 private:
     void RunTask();
-    static unsigned  __stdcall WorkerThreadProc(void* lpParameter);
+    static unsigned  __stdcall ProcessorWorkerThreadProc(void* lpParameter);
 
     //instance ID of thread 
     int          m_InstanceID;

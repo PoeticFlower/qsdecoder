@@ -32,6 +32,14 @@
 #include "sysmem_allocator.h"
 
 typedef std::deque<mfxFrameSurface1*> TSurfaceQueue;
+typedef void (*TDecodeComplete)(mfxFrameSurface1* pSurface, void* obj);
+
+struct TAsyncDecodeInfo
+{
+    mfxFrameSurface1* pSurface;
+    mfxSyncPoint syncPoint;
+    CQsEvent lock;
+};
 
 class CQuickSyncDecoder 
 {
@@ -49,7 +57,7 @@ public:
         return InternalReset(pVideoParams, nPitch, true);     
     }
 
-    mfxStatus Decode(mfxBitstream* pBS, mfxFrameSurface1*& pFrameSurface);
+    mfxStatus Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurface1*& pFrameSurface);
     mfxStatus GetVideoParams(mfxVideoParam* pVideoParams);
     IDirect3DDeviceManager9* GetD3DDeviceManager()
     {
@@ -146,6 +154,16 @@ public:
 
     mfxStatus LockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
     mfxStatus UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
+    void SetOnDecodeComplete(TDecodeComplete func, void * obj)
+    {
+        m_OnDecodeComplete = func;
+        m_Parent = obj;
+    }
+
+    __forceinline void WaitForDecoder()
+    {
+        m_AsyncDecodeInfo.lock.Wait(INFINITE);
+    }
 
 protected:
     mfxStatus         InternalReset(mfxVideoParam* pVideoParams, mfxU32 nPitch, bool bInited);
@@ -154,6 +172,10 @@ protected:
     void              CloseSession();
     mfxStatus         InitD3D();
     void              CloseD3D();
+    unsigned          DecoderWorkerThreadMsgLoop();
+
+    // statics
+    static unsigned  __stdcall DecoderWorkerThreadProc(void* pThis);
 
 // data members
     // session
@@ -180,8 +202,16 @@ protected:
     IDirect3DDeviceManager9* m_pD3dDeviceManager; 
     IDirect3DDevice9*        m_pD3dDevice;
 
-    TSurfaceQueue m_OutputSurfaceQueue;
+    // Async decoder
+    HANDLE              m_hDecoderWorkerThread;
+    unsigned            m_DecoderWorkerThreadId;
+    TAsyncDecodeInfo    m_AsyncDecodeInfo;
+    TDecodeComplete     m_OnDecodeComplete; // Callback for async decode
+    void*               m_Parent;
+
+    TSurfaceQueue       m_OutputSurfaceQueue;
     std::set<mfxFrameSurface1*> m_LockedSurfaces;
+
 
     // Various locks
     CQsLock m_csOutputQueueLock;
