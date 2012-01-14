@@ -400,7 +400,7 @@ size_t GetCoreCount()
 
         int coreCount = 0;
         DWORD_PTR tempMask = 1;
-        for (int i=0; i<sizeof(processAffinityMask)*8; ++i)
+        for (size_t i = 0; i < sizeof(processAffinityMask) * 8; ++i)
         {
             if (processAffinityMask & tempMask)
                 ++coreCount;
