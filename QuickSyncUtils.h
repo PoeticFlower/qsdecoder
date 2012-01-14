@@ -47,7 +47,7 @@ const char* GetCodecName(DWORD codec);
 // Name of codec's profile - profile identifier is accoding to DirectShow
 const char* GetProfileName(DWORD codec, DWORD profile);
 
-bool CheckForSSE41();
+bool IsSSE41Enabled();
 size_t GetCoreCount();
 
 // Set current thread name in VS debugger
@@ -100,27 +100,21 @@ private:
 class CQsEvent
 {
 public:
-    CQsEvent(bool bSignaled = true, bool bManual = true)
+    CQsEvent(bool bSignaled = true, bool bManual = true) : m_bManual(bManual)
     {
         m_hEvent = CreateEvent(NULL, (BOOL)bManual, (BOOL)bSignaled, NULL);
-#ifdef _DEBUG
-        m_bState = bSignaled;
-#endif
+        m_bLocked = (m_bManual) ? !bSignaled : true /* auto is always locked */;
     }
 
-    inline void SetState(bool bSignaled)
+    __forceinline void Lock()
     {
-        if (bSignaled)
-        {
-            SetEvent(m_hEvent);
-        }
-        else
-        {
-            ResetEvent(m_hEvent);
-        }
-#ifdef _DEBUG
-        m_bState = bSignaled;
-#endif
+        ResetEvent(m_hEvent);
+        m_bLocked = true;
+    }
+    __forceinline void Unlock()
+    {
+        SetEvent(m_hEvent);
+        m_bLocked = !m_bManual;
     }
 
     bool Wait(DWORD dwMilliseconds = INFINITE)
@@ -132,9 +126,8 @@ public:
 
 private:
     HANDLE m_hEvent;
-#ifdef _DEBUG
-    bool m_bState;
-#endif
+    const bool m_bManual;
+    bool m_bLocked;
 };
 
 // Locks a critical section, and unlocks it automatically
@@ -202,7 +195,7 @@ public:
         CQsAutoLock lock(this);
     }
 
-    bool Push(const T& item, DWORD dwMiliSecs)
+    bool PushBack(const T& item, DWORD dwMiliSecs)
     {
         if (dwMiliSecs > 0 && !WaitForCapacity(dwMiliSecs))
             return false; // timeout
@@ -210,7 +203,7 @@ public:
             CQsAutoLock lock(this);
 
             // Not empty anymore
-            m_NotEmptyEvent.SetState(true);
+            m_NotEmptyEvent.Unlock();
             m_Queue.push_back(item);
 
             // check new size
@@ -219,13 +212,13 @@ public:
             // Out of capacity
             if (size == m_Capacity)
             {
-                m_CapacityEvent.SetState(false);
+                m_CapacityEvent.Lock();
             }
         }
         return true;
     }
 
-    inline bool Pop(T& res, DWORD dwMiliSecs)
+    inline bool PopFront(T& res, DWORD dwMiliSecs)
     {
         if (dwMiliSecs > 0 && !WaitForNotEmpty(dwMiliSecs))
             return false;
@@ -241,11 +234,12 @@ public:
             size_t size = m_Queue.size();
             if (size == 0)
             {
-                m_NotEmptyEvent.SetState(false);
+                m_NotEmptyEvent.Lock();
             }
-            else if (size == m_Capacity - 1)
+            
+            if (size == m_Capacity - 1)
             {
-                m_CapacityEvent.SetState(true);
+                m_CapacityEvent.Unlock();
             }
         }
         return true;

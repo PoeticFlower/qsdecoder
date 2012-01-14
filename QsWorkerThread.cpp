@@ -52,7 +52,7 @@ CQsWorkerThread::CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFl
 
     m_State = stReady;
     m_InstanceID = instanceID;
-    m_hThread = (HANDLE)_beginthreadex(NULL, 0, &WorkerThreadProc, this, dwCreateFlags, &m_ThreadID);
+    m_hThread = (HANDLE)_beginthreadex(NULL, 0, &ProcessorWorkerThreadProc, this, dwCreateFlags, &m_ThreadID);
     ::SetThreadPriority(m_hThread, nPriority);
 
     // Set thread name (for visual studio debugger)
@@ -128,7 +128,7 @@ void CQsWorkerThread::RunTask()
     m_pThreadPool->OnThreadFinished();
 }
 
-unsigned  __stdcall CQsWorkerThread::WorkerThreadProc(void* lpParameter)
+unsigned  __stdcall CQsWorkerThread::ProcessorWorkerThreadProc(void* lpParameter)
 {
     CQsWorkerThread* pObject = (CQsWorkerThread*)lpParameter;
     

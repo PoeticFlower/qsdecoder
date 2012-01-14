@@ -38,7 +38,7 @@
 //  optimally use a 2K offset between them.
 void* gpu_memcpy(void* d, const void* s, size_t size)
 {
-    static bool s_SSE4_1_enabled = CheckForSSE41();
+    static bool s_SSE4_1_enabled = IsSSE41Enabled();
     if (d == NULL || s == NULL) return NULL;
 
     // If memory is not aligned, use memcpy
@@ -377,7 +377,7 @@ const char* GetProfileName(DWORD codec, DWORD profile)
     return "Unknown";
 }
 
-bool CheckForSSE41()
+bool IsSSE41Enabled()
 {
    int CPUInfo[4];
     __cpuid(CPUInfo, 1);
@@ -391,11 +391,23 @@ size_t GetCoreCount()
 
     if (0 == s_CoreCount)
     {
-        int CPUInfo[4];
-        __cpuid(CPUInfo, 1);
+        DWORD_PTR processAffinityMask;
+        DWORD_PTR systemAffinityMask;
 
-        size_t coreCount = ((CPUInfo[1] >> 17) & 0xff);
-        s_CoreCount = max(1, min(QS_MAX_CPU_CORES, coreCount));
+        GetProcessAffinityMask(GetCurrentProcess(),
+            &processAffinityMask,
+            &systemAffinityMask);
+
+        int coreCount = 0;
+        DWORD_PTR tempMask = 1;
+        for (int i=0; i<sizeof(processAffinityMask)*8; ++i)
+        {
+            if (processAffinityMask & tempMask)
+                ++coreCount;
+            tempMask <<= 1;
+        }
+
+        s_CoreCount = max(1, coreCount);
     }
 
     return s_CoreCount;    

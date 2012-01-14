@@ -97,10 +97,11 @@ protected:
     inline void PushSurface(mfxFrameSurface1* pSurface);
     inline mfxFrameSurface1* PopSurface();
     void FlushOutputQueue();
-    unsigned WorkerThreadMsgLoop();
+    unsigned ProcessorWorkerThreadMsgLoop();
 
     // statics
-    static unsigned  __stdcall WorkerThreadProc(void* pThis);
+    static void OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj);
+    static unsigned  __stdcall ProcessorWorkerThreadProc(void* pThis);
 
     // data members
     bool m_OK;
@@ -117,9 +118,8 @@ protected:
     volatile bool       m_bNeedToFlush;       // a flush was seen but not handled yet
     bool                m_bDvdDecoding;       // support DVD decoding
     CQsConfig           m_Config;
-    HANDLE              m_hWorkerThread;
-    unsigned            m_WorkerThreadId;
-    volatile bool       m_WorkerThreadIsRunning;
+    HANDLE              m_hProcessorWorkerThread;
+    unsigned            m_ProcessorWorkerThreadId;
 
     typedef std::pair<QsFrameData*, CQsAlignedBuffer*> TQsQueueItem;
 

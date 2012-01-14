@@ -28,6 +28,11 @@
 
 #pragma once
 
+//#define VERBOSE
+
+#define TM_DECODE_FRAME  (WM_USER + 1)
+#define TM_PROCESS_FRAME (WM_USER + 2)
+
 #define MSDK_DEC_WAIT_INTERVAL 60000
 #define MSDK_ENC_WAIT_INTERVAL 10000
 #define MSDK_VPP_WAIT_INTERVAL 60000

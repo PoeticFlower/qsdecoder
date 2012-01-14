@@ -77,7 +77,8 @@ CQsThreadPool::~CQsThreadPool()
         m_pThreads[i]->SetState(CQsWorkerThread::stQuit);
     }
 
-    m_WorkStartedEvent.SetState(1);
+    // Free thread from their lock
+    m_WorkStartedEvent.Unlock();
 
     for (size_t i = 0; i < m_nThreadCount; ++i)
     {
@@ -131,7 +132,7 @@ HRESULT CQsThreadPool::doRun(IQsTask* pTask)
 //            Sleep(0);
         }
 
-        m_WorkFinishedEvent.SetState(false);
+        m_WorkFinishedEvent.Lock();
         for (size_t i = 0; i < m_nThreadCount; ++i)
         {
             m_pThreads[i]->SetTask(pTask);
@@ -139,7 +140,7 @@ HRESULT CQsThreadPool::doRun(IQsTask* pTask)
         }
         
         // Signal threads to start working
-        m_WorkStartedEvent.SetState(true);
+        m_WorkStartedEvent.Unlock();
 
         // Wait for all threads to finish
         m_WorkFinishedEvent.Wait(INFINITE);
@@ -153,8 +154,8 @@ void CQsThreadPool::OnThreadFinished()
     //last worker thread
     if (0 == InterlockedDecrement(&m_nRunningThreadsCount))
     {
-        m_WorkStartedEvent.SetState(0);
-        m_WorkFinishedEvent.SetState(1);
+        m_WorkStartedEvent.Lock();
+        m_WorkFinishedEvent.Unlock();
     }
     //other worker threads
     else

@@ -38,7 +38,6 @@
 #include "QuickSync.h"
 
 #define PAGE_MASK 4095
-#define TM_PROCESS_FRAME (WM_USER + 1)
 
 EXTERN_GUID(WMMEDIASUBTYPE_WVC1, 
 0x31435657, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71); 
@@ -58,9 +57,8 @@ CQuickSync::CQuickSync() :
     m_bFlushing(false),
     m_bNeedToFlush(false),
     m_bDvdDecoding(false),
-    m_hWorkerThread(NULL),
-    m_WorkerThreadId(0),
-    m_WorkerThreadIsRunning(false),
+    m_hProcessorWorkerThread(NULL),
+    m_ProcessorWorkerThreadId(0),
     m_DecodedFramesQueue(4),
     m_ProcessedFramesQueue(4),
     m_FreeFramesPool(4)
@@ -69,6 +67,7 @@ CQuickSync::CQuickSync() :
 
     mfxStatus sts = MFX_ERR_NONE;
     m_pDecoder = new CQuickSyncDecoder(sts);
+    m_pDecoder->SetOnDecodeComplete(&CQuickSync::OnDecodeComplete, this);
 
     MSDK_ZERO_VAR(m_mfxParamsVideo);
     //m_mfxParamsVideo.AsyncDepth = 1; //causes issues when 1
@@ -85,7 +84,9 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableWMV9  = true;
 
     m_Config.bEnableMultithreading = true;
-    m_Config.nEnableMtCopy = true;
+    m_Config.bEnableMtProcessing = m_Config.bEnableMultithreading;
+    m_Config.bEnableMtDecode     = m_Config.bEnableMultithreading;
+    //m_Config.bEnableMtCopy = true;
 
     // Currently not working well - menu decoding :(
     //m_Config.bEnableDvdDecoding = true;
@@ -102,23 +103,25 @@ CQuickSync::~CQuickSync()
 
     CQsAutoLock cObjectLock(&m_csLock);
 
-    if (m_WorkerThreadId)
+    // Wait for the worker thread to finish
+    if (m_ProcessorWorkerThreadId)
     {
-        PostThreadMessage(m_WorkerThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(m_hWorkerThread, INFINITE);
-        CloseHandle(m_hWorkerThread);
+        PostThreadMessage(m_ProcessorWorkerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(m_hProcessorWorkerThread, INFINITE);
+        CloseHandle(m_hProcessorWorkerThread);
     }
 
-    // Create global thread pool
-    if (m_Config.nEnableMtCopy)
+    // Destroy global thread pool
+    if (m_Config.bEnableMtCopy)
     {
         CQsThreadPool::DestroyThreadPool();
     }
 
+    // Cleanup the free frame pool
     while (!m_FreeFramesPool.Empty())
     {
         TQsQueueItem item;
-        if (m_FreeFramesPool.Pop(item, 0))
+        if (m_FreeFramesPool.PopFront(item, 0))
         {
             delete item.first;
             delete item.second;
@@ -144,7 +147,7 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
         return S_OK;
     }
     
-    //VC1
+    //VC1 or WMV3
     if ((fourCC == FOURCC_VC1) || (fourCC == FOURCC_WMV3))
     {
         m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_VC1;
@@ -399,22 +402,17 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     SetAspectRatio(*vih2, mfx.FrameInfo);
 
-    // Init Media SDK decoder is done in OnSeek to allow late initialization needed
-    // by full screen exclusive mode since D3D devices can't be created. The DS filter must send
-    // the D3D device manager to this decoder for surface allocation.
-    if (sts == MFX_ERR_NONE)
-    {
-        m_pDecoder->SetConfig(m_Config);
-    }
-
     // Create worker thread
-    if (m_Config.bEnableMultithreading)
+    m_Config.bEnableMtProcessing = m_Config.bEnableMtProcessing && m_Config.bEnableMultithreading;
+    m_Config.bEnableMtDecode     = m_Config.bEnableMtDecode     && m_Config.bEnableMultithreading;
+
+    if (m_Config.bEnableMtProcessing)
     {
-        m_hWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &WorkerThreadProc, this, 0, &m_WorkerThreadId);
+        m_hProcessorWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &ProcessorWorkerThreadProc, this, 0, &m_ProcessorWorkerThreadId);
     }
 
     // Create global thread pool
-    if (m_Config.nEnableMtCopy)
+    if (m_Config.bEnableMtCopy)
     {
         CQsThreadPool::CreateThreadPool();
     }
@@ -425,8 +423,16 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         for (unsigned i = 0; i < queueCapacity; ++i)
         {
             TQsQueueItem item(new QsFrameData, new CQsAlignedBuffer(0));
-            m_FreeFramesPool.Push(item, 0);
+            m_FreeFramesPool.PushBack(item, 0);
         }
+    }
+
+    // Init Media SDK decoder is done in OnSeek to allow late initialization needed
+    // by full screen exclusive mode since D3D devices can't be created. The DS filter must send
+    // the D3D device manager to this decoder for surface allocation.
+    if (sts == MFX_ERR_NONE)
+    {
+        m_pDecoder->SetConfig(m_Config);
     }
 
 done:
@@ -448,7 +454,7 @@ void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& frameInfo)
     // AR is not always contained in the header (it's optional for MFX decoder initialization though)
     if (frameInfo.AspectRatioW * frameInfo.AspectRatioH == 0)
     {
-        //convert display aspect ratio (is in VIDEOINFOHEADER2) to pixel aspect ratio (is accepted by MediaSDK components)
+        // Convert display aspect ratio (is in VIDEOINFOHEADER2) to pixel aspect ratio (is accepted by MediaSDK components)
         mfxStatus sts = DARtoPAR(vih2.dwPictAspectRatioX, vih2.dwPictAspectRatioY, 
             frameInfo.CropW, frameInfo.CropH,
             frameInfo.AspectRatioW, frameInfo.AspectRatioH);
@@ -528,12 +534,21 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     while (mfxBS.DataLength > 0 && !m_bNeedToFlush)
     {
         // Decode the bitstream
-        sts = m_pDecoder->Decode(&mfxBS, pSurfaceOut);                
+        sts = m_pDecoder->Decode(&mfxBS, m_Config.bEnableMtDecode, pSurfaceOut);                
 
         if (MFX_ERR_NONE == sts)
         {
-            // Lock the surface so it will not be used by decoder->FindFreeSurface
-            QueueSurface(pSurfaceOut, true);
+            if (NULL != pSurfaceOut)
+            {
+                // Lock the surface so it will not be used by decoder->FindFreeSurface
+                QueueSurface(pSurfaceOut, true);
+            }
+            else
+            {
+                // Make sure various queues are flushed (avoid deadlock)
+                DeliverSurface(false);
+            }
+
             continue;
         }
         else if (MFX_ERR_MORE_DATA == sts)
@@ -544,8 +559,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
         {
             MSDK_TRACE("QSDcoder: Decode MFX_WRN_VIDEO_PARAM_CHANGED\n");
 
-            // Need to reset the analysis done so far...
-
+            // Need to handle a possible change in the stream parameters
             if (!flushed)
             {
                 sts = OnVideoParamsChanged();
@@ -621,7 +635,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
     {
         while (m_FreeFramesPool.HasCapacity() || !m_DecodedFramesQueue.Empty())
         {
-            if (m_ProcessedFramesQueue.Pop(item, 1))
+            if (m_ProcessedFramesQueue.PopFront(item, 1))
             {
                 if (!m_bNeedToFlush)
                 {
@@ -631,13 +645,13 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
                     m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
                 }
 
-                m_FreeFramesPool.Push(item, 0); // No need to wait - we know there's room
+                m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
             }
         }
     }
     else
     {
-        while (m_ProcessedFramesQueue.Pop(item, 0))
+        while (m_ProcessedFramesQueue.PopFront(item, 0))
         {
             if (!m_bNeedToFlush)
             {
@@ -647,7 +661,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
                 m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
             }
 
-            m_FreeFramesPool.Push(item, 0); // No need to wait - we know there's room
+            m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
         }
     }
 
@@ -734,7 +748,7 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     while (MFX_ERR_NONE == sts || MFX_ERR_MORE_SURFACE == sts)
     {
         mfxFrameSurface1* pSurf = NULL;
-        sts = m_pDecoder->Decode(NULL, pSurf);
+        sts = m_pDecoder->Decode(NULL, false /* sync mode */, pSurf);
 
         if (MFX_ERR_NONE == sts && !m_bNeedToFlush)
         {
@@ -758,6 +772,9 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
 
 void CQuickSync::FlushOutputQueue()
 {
+    // Wait for async deocder to become available
+    m_pDecoder->WaitForDecoder();
+
     // Note that m_bNeedToFlush can be changed by another thread at any time
     // Make sure worker thread has completed all it's tasks
     if (m_bNeedToFlush)
@@ -793,9 +810,9 @@ void CQuickSync::ClearQueue()
     // Loop until free frames pool is full
     while (m_FreeFramesPool.HasCapacity())
     {
-        if (m_ProcessedFramesQueue.Pop(item, 1))
+        if (m_ProcessedFramesQueue.PopFront(item, 1))
         {
-            m_FreeFramesPool.Push(item, 0); // We know there's room
+            m_FreeFramesPool.PushBack(item, 0); // We know there's room
         }
     }
 }
@@ -969,16 +986,16 @@ void CQuickSync::SetConfig(CQsConfig* pConfig)
     m_Config = *pConfig;
 }
 
-unsigned CQuickSync::WorkerThreadProc(void* pThis)
+unsigned CQuickSync::ProcessorWorkerThreadProc(void* pThis)
 {
     ASSERT(pThis != NULL);
-    return static_cast<CQuickSync*>(pThis)->WorkerThreadMsgLoop();
+    return static_cast<CQuickSync*>(pThis)->ProcessorWorkerThreadMsgLoop();
 }
 
-unsigned CQuickSync::WorkerThreadMsgLoop()
+unsigned CQuickSync::ProcessorWorkerThreadMsgLoop()
 {
 #ifdef _DEBUG
-    SetThreadName("*** QS worker ***");
+    SetThreadName("*** QS processor WT ***");
 #endif
 
     BOOL bRet;
@@ -987,7 +1004,6 @@ unsigned CQuickSync::WorkerThreadMsgLoop()
     MSG msg;
     while ((bRet = GetMessage(&msg, (HWND)-1, 0, 0 )) != 0)
     {
-        m_WorkerThreadIsRunning = true;
         // Error
         if (bRet == -1)
         {
@@ -1000,8 +1016,8 @@ unsigned CQuickSync::WorkerThreadMsgLoop()
 
         if (TM_PROCESS_FRAME == msg.message)
         {
-            mfxFrameSurface1* pSurface = NULL;  //(mfxFrameSurface1*)msg.wParam;
-            m_DecodedFramesQueue.Pop(pSurface, 0); // a frame must exist
+            mfxFrameSurface1* pSurface = NULL;
+            m_DecodedFramesQueue.PopFront(pSurface, 0); // a frame must exist
             HRESULT hr = ProcessDecodedFrame(pSurface);
             if (FAILED(hr))
             {
@@ -1015,11 +1031,8 @@ unsigned CQuickSync::WorkerThreadMsgLoop()
             TranslateMessage(&msg); 
             DispatchMessage(&msg);
         }
-
-        m_WorkerThreadIsRunning = false;
     }
 
-    m_WorkerThreadIsRunning = false;
     // All's well
     return 0;
 }
@@ -1032,11 +1045,11 @@ HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
         m_pDecoder->LockSurface(pSurface);
     }
 
-    if (async && m_Config.bEnableMultithreading)
+    if (async && m_Config.bEnableMtProcessing)
     {
         // Post message to worker thread
-        m_DecodedFramesQueue.Push(pSurface, INFINITE);
-        PostThreadMessage(m_WorkerThreadId, TM_PROCESS_FRAME, 0, 0);
+        m_DecodedFramesQueue.PushBack(pSurface, INFINITE);
+        PostThreadMessage(m_ProcessorWorkerThreadId, TM_PROCESS_FRAME, 0, 0);
         DeliverSurface(false /* don't wait*/);
     }
     else
@@ -1079,7 +1092,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     MSDK_CHECK_POINTER(pSurface, S_OK); // decoder queue is empty - return without error
     
     TQsQueueItem item;
-    while (!m_FreeFramesPool.Pop(item, 1))
+    while (!m_FreeFramesPool.PopFront(item, 1))
     {
         // A flush event has just occured - abort frame processing
         if (m_bNeedToFlush)
@@ -1114,7 +1127,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     if (!SetTimeStamp(pSurface, outFrameData))
     {
         // Return frame to free pool
-        m_FreeFramesPool.Push(item, 0);
+        m_FreeFramesPool.PushBack(item, 0);
         m_pDecoder->UnlockSurface(pSurface);
         return S_OK;
     }
@@ -1135,7 +1148,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     outFrameData.dwStride = frameData.Pitch;
     size_t outSize = 4096 + // Adding 4K for page alignment optimizations
         outFrameData.dwStride * pSurface->Info.CropH * 3 / 2;
-
 
     // Make ure we have a buffer with the right size
     if (pOutBuffer->GetBufferSize() < outSize)
@@ -1165,7 +1177,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
         outFrameData.rcClip.right = pSurface->Info.CropW + pSurface->Info.CropX - 1;
     }
 
-    // Offset output buffer's address for fastest SSE4 copy.
+    // Offset output buffer's address for fastest SSE4.1 copy.
     // Page offset (12 lsb of addresses) sould be 2K apart from source buffer
     size_t offset = ((size_t)frameData.Y & PAGE_MASK) ^ (1 << 11);
     
@@ -1179,11 +1191,10 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     outFrameData.bReadOnly = false;
 
     Tmemcpy memcpyFunc = (m_pDecoder->IsD3DAlloc()) ?
-        ( (m_Config.nEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy ) :
-        ( (m_Config.nEnableMtCopy) ? mt_memcpy     : memcpy );
+        ( (m_Config.bEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy ) :
+        ( (m_Config.bEnableMtCopy) ? mt_memcpy     : memcpy );
 
     // Copy Y
-    //gpu_memcpy(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
     memcpyFunc(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
 
     // Copy UV
@@ -1207,14 +1218,15 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     if (!m_bNeedToFlush)
     {
         // Enter result in the processed queue
-        m_ProcessedFramesQueue.Push(item, 0);
+        m_ProcessedFramesQueue.PushBack(item, 0);
     }
     else
     {
         // Return to free pool
-        m_FreeFramesPool.Push(item, 0);
+        m_FreeFramesPool.PushBack(item, 0);
     }
 
+    MSDK_VTRACE("QSDcoder: ProcessDecodedFrame completed\n");
     return S_OK;
 }
 
@@ -1224,4 +1236,21 @@ void CQuickSync::UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& fram
     DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(info.CropW) : info.CropW;
     PARtoDAR(info.AspectRatioW, info.AspectRatioH, alignedWidth, info.CropH,
         frameData.dwPictAspectRatioX, frameData.dwPictAspectRatioY);
+}
+
+void CQuickSync::OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj)
+{
+    // Note - this function is called from the decode thread.
+    CQuickSync* pThis = (CQuickSync*)obj;
+    ASSERT(pThis != NULL);
+
+    // The surface is locked from being reused in another Decode call
+    if (NULL != pSurface)
+    {
+        pThis->m_pDecoder->LockSurface(pSurface);
+    }
+
+    // Post message to worker thread
+    pThis->m_DecodedFramesQueue.PushBack(pSurface, INFINITE);
+    PostThreadMessage(pThis->m_ProcessorWorkerThreadId, TM_PROCESS_FRAME, 0, 0);
 }
