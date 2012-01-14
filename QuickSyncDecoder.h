@@ -31,6 +31,8 @@
 #include "d3d_allocator.h"
 #include "sysmem_allocator.h"
 
+#define MAX_SURFACES 256
+
 typedef std::deque<mfxFrameSurface1*> TSurfaceQueue;
 typedef void (*TDecodeComplete)(mfxFrameSurface1* pSurface, void* obj);
 
@@ -115,42 +117,38 @@ public:
 
     __forceinline void LockSurface(mfxFrameSurface1* pSurface)
     {
-        CQsAutoLock lock(&m_csSurfaceLock);
-        ASSERT(pSurface != NULL);
+        size_t i = pSurface - m_pFrameSurfaces;
+        ASSERT(i < m_nRequiredFramesNum);
 
-        auto it = m_LockedSurfaces.find(pSurface);
-        if (it == m_LockedSurfaces.end())
+        if (i < m_nRequiredFramesNum)
         {
-            m_LockedSurfaces.insert(pSurface);
+            InterlockedIncrement(&m_LockedSurfaces[i]);
         }
     }
 
     __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
     {
-        CQsAutoLock lock(&m_csSurfaceLock);
-        ASSERT(pSurface != NULL);
+        size_t i = pSurface - m_pFrameSurfaces;
+        ASSERT(i < m_nRequiredFramesNum);
 
-        auto it = m_LockedSurfaces.find(pSurface);
-        if (it != m_LockedSurfaces.end())
+        if (i >=0 && i < m_nRequiredFramesNum)
         {
-            m_LockedSurfaces.erase(it);
+            if (0 > InterlockedDecrement(&m_LockedSurfaces[i]))
+            {
+                ASSERT(m_LockedSurfaces[i] >= 0);
+            }
         }
     }
 
-    bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
+    __forceinline bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
     {
-        CQsAutoLock lock(&m_csSurfaceLock);
-        ASSERT(pSurface != NULL);
-
-        if (0 != pSurface->Data.Locked)
-            return true;
-
-        auto it = m_LockedSurfaces.find(pSurface);
-        return it != m_LockedSurfaces.end();
+        size_t i = pSurface - m_pFrameSurfaces;
+        ASSERT(i < m_nRequiredFramesNum);
+        return m_LockedSurfaces[i] > 0 || pSurface->Data.Locked > 0;
     }
 
-    bool IsD3DAlloc() { return m_bUseD3DAlloc; }
-    bool IsHwAccelerated() { return m_bHwAcceleration; }
+    __forceinline bool IsD3DAlloc() { return m_bUseD3DAlloc; }
+    __forceinline bool IsHwAccelerated() { return m_bHwAcceleration; }
 
     mfxStatus LockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
     mfxStatus UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
@@ -210,12 +208,10 @@ protected:
     void*               m_Parent;
 
     TSurfaceQueue       m_OutputSurfaceQueue;
-    std::set<mfxFrameSurface1*> m_LockedSurfaces;
-
+    volatile LONG       m_LockedSurfaces[MAX_SURFACES];
 
     // Various locks
     CQsLock m_csOutputQueueLock;
-    CQsLock m_csSurfaceLock;
 
 private:
    DISALLOW_COPY_AND_ASSIGN(CQuickSyncDecoder);
