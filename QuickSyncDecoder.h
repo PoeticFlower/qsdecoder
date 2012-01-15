@@ -182,6 +182,7 @@ protected:
     mfxIMPL          m_mfxImpl;
     CQsConfig        m_Config;
     bool             m_bHwAcceleration;
+    bool             m_bHwAccelInit;
 
     // Decoder
     MFXVideoDECODE* m_pmfxDEC;

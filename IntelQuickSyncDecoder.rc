@@ -14,8 +14,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,23,0,0
- PRODUCTVERSION 0,23,0,0
+ FILEVERSION 0,24,0,0
+ PRODUCTVERSION 0,24,0,0
  FILEFLAGSMASK 0x17L
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -32,13 +32,13 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Intel Corp."
             VALUE "FileDescription", "IntelQuickSyncDecoder DLL"
-            VALUE "FileVersion", "0.23 Beta"
+            VALUE "FileVersion", "0.24 Beta"
             VALUE "InternalName", "IntelQuickSyncDecoder"
             VALUE "LegalCopyright", "BSD lisence. © 2012 Intel ® Corp."
             VALUE "LegalTrademarks", "Intel QuickSync"
             VALUE "OriginalFilename", "IntelQuickSyncDecoder.dll"
             VALUE "ProductName", "IntelQuickSyncDecoder"
-            VALUE "ProductVersion", "0.23 Beta"
+            VALUE "ProductVersion", "0.24 Beta"
         END
     END
     BLOCK "VarFileInfo"

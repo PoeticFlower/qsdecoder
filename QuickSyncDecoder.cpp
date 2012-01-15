@@ -58,6 +58,7 @@ static int GetIntelAdapterId(IDirect3D9* pd3d)
 CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     m_mfxVideoSession(NULL),
     m_mfxImpl(MFX_IMPL_UNSUPPORTED),
+    m_bHwAccelInit(false),
     m_pmfxDEC(0),
     m_pVideoParams(0),
     m_pFrameAllocator(NULL),
@@ -306,11 +307,15 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     if (!bInited)
     {
         // Check if video format is supported by HW acceleration
-        if (MFX_WRN_PARTIAL_ACCELERATION == CheckHwAcceleration(pVideoParams))
+        if (!m_bHwAccelInit)
         {
-            // Change allocator to system memory
-            //m_bUseD3DAlloc = false; // causes crashes!
-            m_bHwAcceleration = false; // this is just for knowledge
+            if (MFX_WRN_PARTIAL_ACCELERATION == CheckHwAcceleration(pVideoParams))
+            {
+                // Do not change allocator to system memory - will cause a crash!
+                m_bHwAcceleration = false; // This is just for knowledge
+            }
+
+            m_bHwAccelInit = true;
         }
 
         // Setup allocator - will initialize D3D if needed
