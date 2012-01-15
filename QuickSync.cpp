@@ -884,7 +884,7 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
     mfxFrameInfo& curInfo = m_mfxParamsVideo.mfx.FrameInfo;
     mfxFrameInfo& newInfo = params.mfx.FrameInfo;
 
-    bool bFrameRateChange = (curInfo.FrameRateExtN != newInfo.FrameRateExtN) ||(curInfo.FrameRateExtD != newInfo.FrameRateExtD);
+    bool bFrameRateChange = (curInfo.FrameRateExtN != newInfo.FrameRateExtN) || (curInfo.FrameRateExtD != newInfo.FrameRateExtD);
 
     if (!bFrameRateChange)
         return MFX_ERR_NONE;
@@ -899,7 +899,6 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
 
     double frameRate = (double)curInfo.FrameRateExtN / (double)curInfo.FrameRateExtD;
     m_TimeManager.OnVideoParamsChanged(frameRate);
-
     return MFX_ERR_NONE;
 }
 
