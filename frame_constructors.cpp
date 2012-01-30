@@ -115,13 +115,13 @@ mfxStatus CFrameConstructor::ConstructHeaders(
     MSDK_SAFE_DELETE_ARRAY(m_Headers.Data);
     MSDK_ZERO_VAR(m_Headers);
 
-    // nothing to do here...
+    // Nothing to do here...
     if (nMtSize <= nVideoInfoSize)
     {
         return MFX_ERR_MORE_DATA;
     }
 
-    // splitter adds sequence headers to the end of the vih
+    // Splitter adds sequence headers to the end of the vih
     size_t nSeqHeaderSize;
     mfxU8* pSeqHeader;
     MPEG2VIDEOINFO* mp2 = NULL;
@@ -167,7 +167,7 @@ mfxStatus CFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstream*
         MSDK_CHECK_ERROR(nDataSize, 0, MFX_ERR_MORE_DATA);
     }
 
-    // prefix the sequence headers if needed
+    // Prefix the sequence headers if needed
     size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
                 ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength);
 
@@ -176,13 +176,13 @@ mfxStatus CFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstream*
     mfxU8* pData = pBS->Data = new mfxU8[newDataSize];
     MSDK_CHECK_POINTER(pData, MFX_ERR_NULL_PTR);
 
-    // write data left from previous samples
+    // Write data left from previous samples
     WriteResidualData(pData);
 
-    // write sequence headers
+    // Write sequence headers
     WriteHeaders(pData);
 
-    // append new data
+    // Append new data
     WriteSampleData(pData, pDataBuffer, nDataSize);
     pBS->DataLength = (mfxU32)(pData - pBS->Data);
 
@@ -347,13 +347,13 @@ mfxStatus CVC1FrameConstructor::ConstructHeaders(
     MSDK_SAFE_DELETE_ARRAY(m_Headers.Data);
     MSDK_ZERO_VAR(m_Headers);
 
-    // nothing to do here...
+    // Nothing to do here...
     if (nMtSize <= nVideoInfoSize)
     {
         return MFX_ERR_MORE_DATA;
     }
 
-    //header should be additionally constructed for main&simple profile in asf data type
+    // Header should be additionally constructed for main&simple profile in asf data type
     m_Headers.MaxLength = m_Headers.DataLength = (mfxU32)(nMtSize - nVideoInfoSize + 20);
     m_Headers.Data = new mfxU8[m_Headers.MaxLength];
     mfxStatus sts = ConstructHeaderSM(m_Headers.Data,
@@ -378,20 +378,20 @@ mfxStatus CVC1FrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
 
     UpdateTimeStamp(pSample, pBS);
 
-    // prefix the sequence headers if needed
+    // Prefix the sequence headers if needed
     size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
-        ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength) + // add headers size 
-        8; // add upto 8 bytes for extra start codes
+        ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength) + // Add headers size 
+        8; // Add upto 8 bytes for extra start codes
 
     pBS->MaxLength = (mfxU32)newDataSize;
 
     mfxU8* pData = pBS->Data = new mfxU8[newDataSize];
     MSDK_CHECK_POINTER(pData, MFX_ERR_NULL_PTR);
 
-    // write data left from previous samples
+    // Write data left from previous samples
     WriteResidualData(pData);
 
-    // write sequence headers
+    // Write sequence headers
     WriteHeaders(pData);
 
     if (FOURCC_VC1 != m_FourCC)
@@ -402,12 +402,12 @@ mfxStatus CVC1FrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     }
     else if (false == StartCodeExist(pDataBuffer))
     {
-        // set start code to first 4 bytes
+        // Set start code to first 4 bytes
         SetValue(0x0D010000, pData);
         pData += 4;
     }
 
-    // append new data
+    // Append new data
     WriteSampleData(pData, pDataBuffer, nDataSize);
     pBS->DataLength = (mfxU32)(pData - pBS->Data);
 
@@ -423,20 +423,20 @@ mfxStatus CVC1FrameConstructor::ConstructHeaderSM(mfxU8* pHeaderSM, mfxU32 nHead
         return MFX_ERR_NOT_ENOUGH_BUFFER;
     }
 
-    // set start code
+    // Set start code
     SetValue(0xC5000000, pHeaderSM);
 
-    // set size of sequence header is 4 bytes
+    // Set size of sequence header is 4 bytes
     SetValue(nDataSize, pHeaderSM + 4);
 
-    // copy saved data back
+    // Copy saved data back
     memcpy(pHeaderSM + 8, pDataBuffer, nDataSize);
 
-    // set sizes to the end of data
+    // Set sizes to the end of data
     SetValue(m_Height, pHeaderSM + 8  + nDataSize);
     SetValue(m_Width,  pHeaderSM + 12 + nDataSize);
 
-    // set 0 to the last 4 bytes
+    // Set 0 to the last 4 bytes
     SetValue(0,  pHeaderSM + 16 + nDataSize);
 
     return MFX_ERR_NONE;
@@ -446,7 +446,7 @@ bool CVC1FrameConstructor::StartCodeExist(mfxU8* pStart)
 {
     MSDK_CHECK_POINTER(pStart, false);
 
-    //check first 4 bytes to be start code
+    // Check first 4 bytes to be start code
     mfxU32 value = GetValue32(pStart);
     switch (value)
     {
@@ -461,10 +461,10 @@ bool CVC1FrameConstructor::StartCodeExist(mfxU8* pStart)
     case 0x011D:
     case 0x011E:
     case 0x011F:
-        // start code found
+        // Start code found
         return true;
     default:
-        // start code not found
+        // Start code not found
         return false; 
     }
 }
@@ -475,6 +475,7 @@ bool CVC1FrameConstructor::StartCodeExist(mfxU8* pStart)
 CAVCFrameConstructor::CAVCFrameConstructor()
 {
     m_HeaderNalSize  = 2;  //MSDN - MPEG2VideoInfo->dwSequenceHeader delimited by 2 byte length fields
+    m_NalSize = 4;
     SetValue(0x01000000, m_H264StartCode);
     m_TempBuffer.reserve(1<<20);
 }
@@ -491,7 +492,7 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
     MSDK_SAFE_DELETE_ARRAY(m_Headers.Data);
     m_Headers.DataLength = m_Headers.MaxLength = 0;
 
-    // nothing to do here...
+    // Nothing to do here...
     if (nMtSize <= nVideoInfoSize || FORMAT_MPEG2_VIDEO != guidFormat)
     {
         return MFX_ERR_MORE_DATA;
@@ -509,7 +510,7 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
     m_TempBuffer.clear();
     m_NalSize = mp2->dwFlags;     
 
-    itStartCode.SetBuffer((BYTE*)mp2->dwSequenceHeader, mp2->cbSequenceHeader, m_HeaderNalSize); //Nal size = 2 
+    itStartCode.SetBuffer((BYTE*)mp2->dwSequenceHeader, mp2->cbSequenceHeader, m_HeaderNalSize); // Nal size = 2 
     while (itStartCode.ReadNext())
     {    
         nNalDataLen = itStartCode.GetDataLength(); 
@@ -530,7 +531,7 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
 
     if (m_TempBuffer.size())
     {
-        //Keep a copy of the SPS/PPS to be placed into the decode stream (after each new segment).
+        // Keep a copy of the SPS/PPS to be placed into the decode stream (after each new segment).
         MSDK_SAFE_DELETE_ARRAY(m_Headers.Data);
         m_Headers.Data = new mfxU8[m_TempBuffer.size()];
         m_Headers.DataLength = m_Headers.MaxLength = (mfxU32)m_TempBuffer.size();
@@ -560,7 +561,7 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     pSample->GetPointer(&pDataBuffer);
     MSDK_CHECK_POINTER(pDataBuffer,  MFX_ERR_NULL_PTR);
 
-    itStartCode.SetBuffer(pDataBuffer, nDataSize, m_NalSize); //Nal size = 4
+    itStartCode.SetBuffer(pDataBuffer, nDataSize, m_NalSize); // Nal size = 4
 
     // Iterate over the NALUs and convert them to have start codes.
     while (itStartCode.ReadNext())
@@ -596,7 +597,7 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     mfxU8* pData = pBS->Data = new mfxU8[newDataSize];
     pBS->MaxLength = (mfxU32)newDataSize;
 
-    // write data left from previous samples
+    // Write data left from previous samples
     WriteResidualData(pData);
 
     // Write sequence headers if needed

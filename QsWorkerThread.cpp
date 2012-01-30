@@ -45,7 +45,6 @@ CQsWorkerThread::CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFl
     CQsEvent& workStartedEvent, CQsEvent& workFinishedEvent) :
     m_WorkStartedEvent(workStartedEvent),
     m_WorkFinishedEvent(workFinishedEvent)
-
 {
     m_pThreadPool = CQsThreadPool::GetInstance();
     ASSERT(m_pThreadPool != NULL);

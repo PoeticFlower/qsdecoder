@@ -50,7 +50,7 @@ CQsThreadPool::CQsThreadPool() :
     for (size_t i = 0; i < m_nThreadCount; ++i)
     {
         //the following line creates a thread with a message map
-        m_pThreads[i] = new CQsWorkerThread((int)i, THREAD_PRIORITY_NORMAL, 0, m_WorkStartedEvent, m_WorkFinishedEvent);
+        m_pThreads[i] = new CQsWorkerThread((int)i, THREAD_PRIORITY_HIGHEST, 0, m_WorkStartedEvent, m_WorkFinishedEvent);
 
         if (NULL == m_pThreads[i])
         {
@@ -117,7 +117,7 @@ HRESULT CQsThreadPool::doRun(IQsTask* pTask)
 #ifdef CHECK_FOR_DEADLOCKS
     if (IsBusy())
     {
-        MSDK_TRACE("CQsWorkerThread::ProcessBlocks was called on a locked object.\n"
+        MSDK_TRACE(__FUNCTION__ " was called on a locked object.\n"
             "Possible deadlock!\n");
     }
 #endif
@@ -129,7 +129,7 @@ HRESULT CQsThreadPool::doRun(IQsTask* pTask)
         // Wait for worker threads to become ready
         while (m_nRunningThreadsCount != m_nThreadCount)
         {
-//            Sleep(0);
+//            SwitchToThread();
         }
 
         m_WorkFinishedEvent.Lock();

@@ -189,18 +189,18 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
     allocRequest.NumFrameSuggested = (mfxU16)m_Config.nOutputQueueLength + allocRequest.NumFrameSuggested + 1;
     allocRequest.NumFrameMin = allocRequest.NumFrameSuggested;
 
-    // decide memory type
+    // Decide memory type
     allocRequest.Type = MFX_MEMTYPE_EXTERNAL_FRAME | MFX_MEMTYPE_FROM_DECODE;
     allocRequest.Type |= (m_bUseD3DAlloc) ?
        MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET : MFX_MEMTYPE_SYSTEM_MEMORY;
 
     memcpy(&allocRequest.Info, &pVideoParams->mfx.FrameInfo, sizeof(mfxFrameInfo));
 
-    // allocate frames with H aligned at 32 for both progressive and interlaced content
+    // Allocate frames with H aligned at 32 for both progressive and interlaced content
     allocRequest.Info.Height = MSDK_ALIGN32(allocRequest.Info.Height); 
     allocRequest.Info.Width = (mfxU16)nPitch;
 
-    // perform allocation call. result is saved in m_AllocResponse
+    // Perform allocation call. result is saved in m_AllocResponse
     sts = m_pFrameAllocator->Alloc(m_pFrameAllocator->pthis, &allocRequest, &m_AllocResponse);
     MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
 
@@ -210,13 +210,13 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
     MSDK_CHECK_POINTER(m_pFrameSurfaces, MFX_ERR_MEMORY_ALLOC);
     MSDK_ZERO_MEMORY(m_pFrameSurfaces, sizeof(mfxFrameSurface1) * m_nRequiredFramesNum);
 
-    // alloc decoder work & output surfaces
+    // Allocate decoder work & output surfaces
     for (mfxU32 i = 0; i < m_nRequiredFramesNum; ++i)
     {
-        // copy frame info
+        // Copy frame info
         memcpy(&(m_pFrameSurfaces[i].Info), &pVideoParams->mfx.FrameInfo, sizeof(mfxFrameInfo));
 
-        // save pointer to allocator specific surface object (mid)
+        // Save pointer to allocator specific surface object (mid)
         m_pFrameSurfaces[i].Data.MemId  = m_AllocResponse.mids[i];
         m_pFrameSurfaces[i].Data.Pitch  = (mfxU16)nPitch;
     }
@@ -265,7 +265,7 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         // Doing this for MPEG2 will cause issues like aspect ratio change will not be detected.
         if (pVideoParams->mfx.CodecId == MFX_CODEC_VC1 && pVideoParams->mfx.CodecProfile == MFX_PROFILE_VC1_ADVANCED)
         {
-            MFXVideoSession* saveSession = m_mfxVideoSession; // kill the old session later so MSDK DLL will not unload
+            MFXVideoSession* saveSession = m_mfxVideoSession; // Kill the old session later so MSDK DLL will not unload
             m_mfxVideoSession = NULL;
             CloseSession();
             sts = InitSession(m_mfxImpl);
@@ -282,6 +282,7 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
                 }
             }
 
+            // Another VC1 decoder workaround
             for (int i = 0; i < m_nRequiredFramesNum; ++i)
             {
                 m_pFrameSurfaces[i].Data.Locked = 0;
@@ -293,7 +294,7 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         else
         {
             sts = m_pmfxDEC->Reset(pVideoParams);
-            // need to reset the frame allocator
+            // Need to reset the frame allocator
             if (MFX_ERR_NONE != sts)
             {
                 m_pmfxDEC->Close();
@@ -309,7 +310,7 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         // Check if video format is supported by HW acceleration
         if (!m_bHwAccelInit)
         {
-            if (MFX_WRN_PARTIAL_ACCELERATION == CheckHwAcceleration(pVideoParams))
+            if (m_bHwAcceleration && MFX_WRN_PARTIAL_ACCELERATION == CheckHwAcceleration(pVideoParams))
             {
                 // Do not change allocator to system memory - will cause a crash!
                 m_bHwAcceleration = false; // This is just for knowledge
@@ -400,7 +401,7 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
         }
     } while (MFX_WRN_DEVICE_BUSY == sts || MFX_ERR_MORE_SURFACE == sts);
 
-    // Output is shortly available
+    // Output will be shortly available
     if (MFX_ERR_NONE == sts) 
     {
         if (m_Config.bEnableMtDecode && bAsync)
@@ -412,7 +413,7 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
             m_AsyncDecodeInfo.syncPoint = syncp;
 
             PostThreadMessage(m_DecoderWorkerThreadId, TM_DECODE_FRAME, 0, 0);
-            pFrameSurface = NULL; // return pFrameSurface only in sync mode
+            pFrameSurface = NULL; // Return pFrameSurface only in sync mode
         }
         else
         {
@@ -609,7 +610,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             }
 
             // If renderer is already on Intel's GPU than we can reuse the device.
-            if (adIdentifier.VendorId == 0x8086) //Intel's vendor ID  is 8086h
+            if (adIdentifier.VendorId == 0x8086) // Intel's vendor ID  is 8086h
             {
                 m_pD3dDeviceManager = m_pRendererD3dDeviceManager;
                 goto done;
@@ -674,7 +675,7 @@ done:
                 m_pRendererD3dDeviceManager->UnlockDevice(hDevice, FALSE);
                 m_pRendererD3dDeviceManager->CloseDeviceHandle(&hDevice);
             }
-//            m_pD3dDeviceManager = m_pRendererD3dDeviceManager;
+
             sts = MFX_ERR_NONE;
         }
         else
