@@ -139,8 +139,8 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
 {
     MSDK_SAFE_DELETE(m_pFrameConstructor);
 
-    //MPEG2
-    if (subType == MEDIASUBTYPE_MPEG2_VIDEO)//(fourCC == FOURCC_mpg2) || (fourCC == FOURCC_MPG2))
+    // MPEG2
+    if (subType == MEDIASUBTYPE_MPEG2_VIDEO)
     {
         if (!m_Config.bEnableMPEG2)
             return VFW_E_INVALIDMEDIATYPE;
@@ -150,7 +150,7 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
         return S_OK;
     }
     
-    //VC1 or WMV3
+    // VC1 or WMV3
     if ((fourCC == FOURCC_VC1) || (fourCC == FOURCC_WMV3))
     {
         m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_VC1;
@@ -179,17 +179,15 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
     // H264
     if ((fourCC == FOURCC_H264) || (fourCC == FOURCC_X264) || (fourCC == FOURCC_h264) ||
         (fourCC == FOURCC_avc1) || (fourCC == FOURCC_VSSH) || (fourCC == FOURCC_DAVC) ||
-        (fourCC == FOURCC_PAVC) || (fourCC == FOURCC_AVC1))
+        (fourCC == FOURCC_PAVC) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1))
     {
         if (!m_Config.bEnableH264)
             return VFW_E_INVALIDMEDIATYPE;
 
         m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_AVC;
-
-        m_pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1)) ?
+        m_pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
             new CAVCFrameConstructor :
             new CFrameConstructor;
-
         return S_OK;
     }
 
@@ -200,17 +198,26 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 {
     MSDK_TRACE("QSDcoder: TestMediaType\n");
     if (!m_OK)
+    {
+        MSDK_TRACE("QSDcoder: TestMediaType was called on an invalid object!\n");
         return E_FAIL;
+    }
 
     // Parameter check
     MSDK_CHECK_POINTER(mtIn, E_POINTER);
     MSDK_CHECK_POINTER(mtIn->pbFormat, E_UNEXPECTED);
 
-    // disable DVD playback until it's OK
+    // Disable DVD playback until it's OK
     if (mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK)
+    {
+        MSDK_TRACE("QSDcoder: DVD decoding is not supported!\n");
         return E_FAIL;
+    }
     else if (mtIn->majortype != MEDIATYPE_Video)
+    {
+        MSDK_TRACE("QSDcoder: Invalid majortype GUID!\n");
         return E_FAIL;
+    }
 
     HRESULT hr;
     VIDEOINFOHEADER2* vih2 = NULL;
@@ -227,7 +234,7 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     MSDK_ZERO_VAR(videoParams);
     mfxInfoMFX& mfx = m_mfxParamsVideo.mfx;
 
-    // check if codec profile and level are supported before calling DecodeHeader
+    // Check if codec profile and level are supported before calling DecodeHeader
     if (FORMAT_MPEG2_VIDEO == guidFormat)
     {
         MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(mtIn->pbFormat);
@@ -235,6 +242,7 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     }
 
     delete[] (mfxU8*)vih2;
+    MSDK_TRACE("QSDcoder: TestMediaType finished: %s\n", (SUCCEEDED(hr)) ? "success" : "failure");
     return hr;
 }
 
@@ -254,10 +262,10 @@ HRESULT CQuickSync::CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, V
         nSampleSize = mtIn->cbFormat;
         vih2 = (VIDEOINFOHEADER2*) new mfxU8[nSampleSize];
 
-        // copy the sample as is
+        // Copy the sample as is
         memcpy(vih2, mtIn->pbFormat, nSampleSize);
     }
-    // translate VIDEOINFOHEADER to VIDEOINFOHEADER2 (easier to work with down the road)
+    // Translate VIDEOINFOHEADER to VIDEOINFOHEADER2 (easier to work with down the road)
     else if (FORMAT_VideoInfo == guidFormat)
     {
         size_t extraDataLen = mtIn->cbFormat - sizeof(VIDEOINFOHEADER);
@@ -265,7 +273,7 @@ HRESULT CQuickSync::CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, V
         vih2 = (VIDEOINFOHEADER2*) new mfxU8[nSampleSize];
         MSDK_ZERO_MEMORY(vih2, sizeof(VIDEOINFOHEADER2));
 
-        // initialize the VIDEOINFOHEADER2 structure
+        // Initialize the VIDEOINFOHEADER2 structure
         VIDEOINFOHEADER* pvi = (VIDEOINFOHEADER*)(mtIn->pbFormat);
         vih2->rcSource           = pvi->rcSource;
         vih2->rcTarget           = pvi->rcTarget;
@@ -276,7 +284,7 @@ HRESULT CQuickSync::CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, V
         vih2->dwPictAspectRatioX = pvi->bmiHeader.biWidth;
         vih2->dwPictAspectRatioY = pvi->bmiHeader.biHeight;
 
-        // copy the out of band data (data past the VIDEOINFOHEADER structure.
+        // Copy the out of band data (data past the VIDEOINFOHEADER structure.
         // Note: copy past the size of vih2
         if (extraDataLen)
         {
@@ -332,7 +340,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         return VFW_E_INVALIDMEDIATYPE;
     }
 
-    // check if codec profile and level are supported before calling DecodeHeader
+    // Check if codec profile and level are supported before calling DecodeHeader
     if (FORMAT_MPEG2_VIDEO == guidFormat)
     {
         MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(mtIn->pbFormat);
@@ -355,7 +363,16 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         MSDK_TRACE("QSDcoder::InitDecoder - codec (%s)\n", GetCodecName(mfx.CodecId));
     }
 
-    // construct sequence header and decode the sequence header.
+    // Setup frame rate from either the media type or the decoded header
+    bIsFields = (vih2->dwInterlaceFlags & AMINTERLACE_IsInterlaced) &&
+        (vih2->dwInterlaceFlags & AMINTERLACE_1FieldPerSample);
+    // Try getting the frame rate from the decoded headers
+    if (0 < vih2->AvgTimePerFrame)
+    {
+        m_TimeManager.SetFrameRate(1e7 / vih2->AvgTimePerFrame, bIsFields);
+    }
+
+    // Construct sequence header and decode the sequence header.
     if (nVideoInfoSize < nSampleSize)
     {
         sts = m_pFrameConstructor->ConstructHeaders(vih2, guidFormat, nSampleSize, nVideoInfoSize);
@@ -373,9 +390,9 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
             mfx.FrameInfo.CropW = MSDK_ALIGN16(mfx.FrameInfo.CropW);
         }
 
-        mfx.FrameInfo.CropH        = (mfxU16)MSDK_ALIGN16(vih2->bmiHeader.biHeight);
-        mfx.FrameInfo.Width        = mfx.FrameInfo.CropW;
-        mfx.FrameInfo.Height       = mfx.FrameInfo.CropH;
+        mfx.FrameInfo.CropH        = (mfxU16)vih2->bmiHeader.biHeight;
+        mfx.FrameInfo.Width        = (mfxU16)MSDK_ALIGN16(mfx.FrameInfo.CropW);
+        mfx.FrameInfo.Height       = (mfxU16)MSDK_ALIGN16(mfx.FrameInfo.CropH);
         mfx.FrameInfo.FourCC       = MFX_FOURCC_NV12;
         mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
         ConvertFrameRate(m_TimeManager.GetFrameRate(), 
@@ -385,21 +402,14 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     ASSERT(sts == MFX_ERR_NONE);
 
-    // setup frame rate from either the media type or the decoded header
-    bIsFields = (vih2->dwInterlaceFlags & AMINTERLACE_IsInterlaced) &&
-        (vih2->dwInterlaceFlags & AMINTERLACE_1FieldPerSample);
-    // Try getting the frame rate from the decoded headers
-    if (0 < vih2->AvgTimePerFrame)
-    {
-        m_TimeManager.SetFrameRate(1e7 / vih2->AvgTimePerFrame, bIsFields);
-    }
-    else if (mfx.FrameInfo.FrameRateExtN * mfx.FrameInfo.FrameRateExtD != 0)
+    // In case we don't have a frame rate
+    if (mfx.FrameInfo.FrameRateExtN * mfx.FrameInfo.FrameRateExtD != 0)
     {
         double frameRate = (double)mfx.FrameInfo.FrameRateExtN / (double)mfx.FrameInfo.FrameRateExtD;
         m_TimeManager.SetFrameRate(frameRate, bIsFields);
     }
 
-    // we might decode well even if DecodeHeader failed with MFX_ERR_MORE_DATA
+    // We might decode well even if DecodeHeader failed with MFX_ERR_MORE_DATA
     MSDK_IGNORE_MFX_STS(sts, MFX_ERR_MORE_DATA);
 
     m_nPitch = mfx.FrameInfo.Width;
@@ -453,7 +463,7 @@ void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& frameInfo)
 {
     DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(frameInfo.CropW) : frameInfo.CropW;
     
-    // fix small aspect ratio errors
+    // Fix small aspect ratio errors
     if (MSDK_ALIGN16(vih2.dwPictAspectRatioX) == alignedWidth)
     {
         vih2.dwPictAspectRatioX = alignedWidth;
@@ -574,7 +584,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
                 flushed = true;
             }
 
-            continue; // just continue processing
+            continue; // Just continue processing
         }
         // Need another work surface
         else if (MFX_ERR_MORE_SURFACE == sts)
@@ -659,7 +669,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
     }
     else
     {
-        while (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait use what's ready*/))
+        while (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait, use what's ready*/))
         {
             if (!m_bNeedToFlush)
             {
@@ -771,7 +781,7 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     
     m_TimeManager.Reset();
 
-    // all data has been flushed
+    // All data has been flushed
     m_bNeedToFlush = false;
 
     MSDK_TRACE("QSDcoder: Flush ended\n");
@@ -871,7 +881,7 @@ bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData
     // Just convert the time stamp from the HW decoder
     frameData.rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
     frameData.rtStop = (INVALID_REFTIME == frameData.rtStart) ? INVALID_REFTIME : frameData.rtStart + 1;
-    return true; // return all frames DS filter will handle this
+    return true; // Return all frames DS filter will handle this
 }
 
 mfxStatus CQuickSync::OnVideoParamsChanged()
@@ -970,11 +980,7 @@ HRESULT CQuickSync::CheckCodecProfileSupport(DWORD codec, DWORD profile, DWORD l
 
 void CQuickSync::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager)
 {
-    if (m_pDecoder->SetD3DDeviceManager(pDeviceManager) && NULL != pDeviceManager)
-    {
-        // Reset/init in this stage will cause faster initialization in benchmarks
-//        m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
-    }
+    m_pDecoder->SetD3DDeviceManager(pDeviceManager);
 }
 
 void CQuickSync::GetConfig(CQsConfig* pConfig)
@@ -1027,7 +1033,7 @@ unsigned CQuickSync::ProcessorWorkerThreadMsgLoop()
         if (TM_PROCESS_FRAME == msg.message)
         {
             mfxFrameSurface1* pSurface = NULL;
-            m_DecodedFramesQueue.PopFront(pSurface, 0); // a frame must exist
+            m_DecodedFramesQueue.PopFront(pSurface, 0); // A frame must exist
             HRESULT hr = ProcessDecodedFrame(pSurface);
             if (FAILED(hr))
             {
@@ -1066,7 +1072,7 @@ HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
     return S_OK;
 }
 
-// This function works on the worker thread
+// This function works on a worker thread
 HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 {
     MSDK_VTRACE("QSDcoder: ProcessDecodedFrame\n");
@@ -1094,7 +1100,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
     // Get oldest surface from queue
     pSurface = PopSurface();
-    MSDK_CHECK_POINTER(pSurface, S_OK); // decoder queue is empty - return without error
+    MSDK_CHECK_POINTER(pSurface, S_OK); // Decoder queue is empty - return without error
     
     TQsQueueItem item;
     while (!m_FreeFramesPool.PopFront(item, 10))
@@ -1194,7 +1200,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
     // App can modify this buffer
     outFrameData.bReadOnly = false;
-#if 1 // use this disable actual copying for benchmarking
+#if 1 // Use this disable actual copying for benchmarking
     Tmemcpy memcpyFunc = (m_pDecoder->IsD3DAlloc()) ?
         ( (m_Config.bEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy ) :
         ( (m_Config.bEnableMtCopy) ? mt_memcpy     : memcpy );

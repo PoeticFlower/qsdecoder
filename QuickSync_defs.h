@@ -121,6 +121,7 @@
 #define FOURCC_DAVC mmioFOURCC('D','A','V','C')
 #define FOURCC_PAVC mmioFOURCC('P','A','V','C')
 #define FOURCC_AVC1 mmioFOURCC('A','V','C','1')
+#define FOURCC_CCV1 mmioFOURCC('C','C','V','1')
 
 // Output formats
 #define FOURCC_NV12 mmioFOURCC('N','V','1','2')

@@ -48,7 +48,7 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
         return memcpy(d, s, size);
     }
 
-    size_t reminder = size & 127; // copy 128 bytes every loop
+    size_t reminder = size & 127; // Copy 128 bytes every loop
     size_t end = 0;
 
     __m128i* pTrg = (__m128i*)d;
@@ -84,28 +84,28 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
         mov edx, pTrg;
         mov eax, pTrgEnd;
 
-        // test ending condition
+        // Test end condition
         cmp edx, eax; // if (pTrgEnd >= pTrg) goto endLoop
         jae endLoop;
 startLoop:
-        movntdqa  xmm0,    [ecx];
+        movntdqa  xmm0, [ecx];
+        movntdqa  xmm1, [ecx + 16];
+        movntdqa  xmm2, [ecx + 32];
+        movntdqa  xmm3, [ecx + 48];
+        movntdqa  xmm4, [ecx + 64];
+        movntdqa  xmm5, [ecx + 80];
+        movntdqa  xmm6, [ecx + 96];
+        movntdqa  xmm7, [ecx + 112];
+        add  ecx, 128;
         movdqa    [edx],       xmm0;
-        movntdqa  xmm1,    [ecx + 16];
         movdqa    [edx + 16],  xmm1;
-        movntdqa  xmm2,       [ecx + 32];
         movdqa    [edx + 32],  xmm2;
-        movntdqa  xmm3,       [ecx + 48];
         movdqa    [edx + 48],  xmm3;
-        movntdqa  xmm4,       [ecx + 64];
         movdqa    [edx + 64],  xmm4;
-        movntdqa  xmm5,       [ecx + 80];
         movdqa    [edx + 80],  xmm5;
-        movntdqa  xmm6,       [ecx + 96];
         movdqa    [edx + 96],  xmm6;
-        movntdqa  xmm7,       [ecx + 112];
         movdqa    [edx + 112], xmm7;
         add  edx, 128;
-        add  ecx, 128;
         cmp edx, eax; // if (pTrgEnd > pTrg) goto startLoop
         jb  startLoop;
 endLoop:
@@ -277,7 +277,7 @@ mfxStatus DARtoPAR(mfxU32 darw, mfxU32 darh, mfxU32 w, mfxU32 h, mfxU16& parw, m
     reduced_w =  (mfxU16) (w / gcd);
     reduced_h =  (mfxU16) (h / gcd);
 
-    // for mpeg2 we need to set exact values for par (standard supports only dar 4:3, 16:9, 221:100, 1:1)
+    // For mpeg2 we need to set exact values for par (standard supports only dar 4:3, 16:9, 221:100, 1:1)
     if (darw * 3 == darh * 4)
     {
         parw = 4 * reduced_h;
@@ -382,7 +382,7 @@ bool IsSSE41Enabled()
    int CPUInfo[4];
     __cpuid(CPUInfo, 1);
 
-    return 0 != (CPUInfo[2] & (1<<19)); //19th bit of 2nd reg means sse4.1 is enabled
+    return 0 != (CPUInfo[2] & (1<<19)); // 19th bit of 2nd reg means sse4.1 is enabled
 }
 
 size_t GetCoreCount()
@@ -422,7 +422,7 @@ public:
     {
         MSDK_ZERO_VAR(m_Offsets);
         size_t blockSize = size / taskCount;
-        blockSize &= ~15; //make size a multiple of 16 bytes
+        blockSize &= ~15; // Make size a multiple of 16 bytes
 
         size_t offset = 0;
         for (size_t i = 0; i < taskCount; ++i)
@@ -461,7 +461,7 @@ void* mt_memcpy(void* d, const void* s, size_t size)
     MSDK_CHECK_POINTER(d, NULL);
     MSDK_CHECK_POINTER(s, NULL);
 
-    // buffer is very small and not worth the effort
+    // Buffer is very small and not worth the effort
     if (size < MIN_BUFF_SIZE)
     {
         return memcpy(d, s, size);
@@ -477,10 +477,10 @@ void* mt_gpu_memcpy(void* d, const void* s, size_t size)
     MSDK_CHECK_POINTER(d, NULL);
     MSDK_CHECK_POINTER(s, NULL);
 
-    // buffer is very small and not worth the effort
+    // Buffer is very small and not worth the effort
     if (size < MIN_BUFF_SIZE)
     {
-        return memcpy(d, s, size);
+        return gpu_memcpy(d, s, size);
     }
 
     CQsMtCopy task(d, s, size, 2, gpu_memcpy);
