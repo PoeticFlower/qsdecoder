@@ -32,9 +32,6 @@
 #include "QuickSyncUtils.h"
 #include "QuickSyncDecoder.h"
 
-#define MIN_REQUIRED_API_VER_MINOR 1
-#define MIN_REQUIRED_API_VER_MAJOR 1
-
 static int GetIntelAdapterId(IDirect3D9* pd3d)
 {
     MSDK_CHECK_POINTER(pd3d, 0);

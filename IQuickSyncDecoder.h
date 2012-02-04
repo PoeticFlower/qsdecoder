@@ -34,6 +34,15 @@
 // Forward declarations
 struct IDirect3DDeviceManager9;
 
+// Return value of the check function.
+// Caps are bitwise OR of the following values
+enum QsCaps
+{
+    QS_CAP_UNSUPPORTED      = 0,
+    QS_CAP_HW_ACCELERATION  = 1,
+    QS_CAP_SW_EMULATION     = 2
+};
+
 // This struct holds an output frame + meta data
 struct QsFrameData
 {
@@ -210,4 +219,5 @@ extern "C"
     IQuickSyncDecoder* __stdcall createQuickSync();
     void               __stdcall destroyQuickSync(IQuickSyncDecoder*);
     void               __stdcall getVersion(char* ver, const char** license);
+    DWORD              __stdcall check();
 }

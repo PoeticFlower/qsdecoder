@@ -31,6 +31,7 @@
 #include "QuickSync_defs.h"
 #include "QuickSyncUtils.h"
 #include "TimeManager.h"
+#include "QuickSyncDecoder.h"
 #include "QuickSync.h"
 
 #ifdef __INTEL_COMPILER
@@ -76,4 +77,35 @@ void __stdcall getVersion(char* ver, const char** license)
     static const char s_Version[] = QS_DEC_VERSION " by Eric Gur. " COMPILER ", " ARCH " (" __DATE__ " " __TIME__ ")";
     strcpy_s(ver, 100, s_Version);
     *license = "(C) 2011 Intel\xae Corp.";
+}
+
+DWORD __stdcall check()
+{
+    mfxVersion apiVersion = {1, 1};
+    MFXVideoSession* pSession = new MFXVideoSession;
+    mfxIMPL impl = MFX_IMPL_AUTO_ANY;
+    mfxStatus sts = pSession->Init(impl, &apiVersion);
+    MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, QS_CAP_UNSUPPORTED);
+    pSession->QueryIMPL(&impl);
+
+    DWORD caps;
+    if (impl == MFX_IMPL_SOFTWARE)
+    {
+        caps = QS_CAP_SW_EMULATION;
+    }
+    else
+    {
+        caps = QS_CAP_HW_ACCELERATION;
+
+        // test SW emulation
+        pSession->Close();
+        sts = pSession->Init(MFX_IMPL_SOFTWARE, &apiVersion);
+        if (MFX_ERR_NONE == sts)
+        {
+            caps |= QS_CAP_SW_EMULATION;
+        }
+    }
+
+    delete pSession;
+    return caps;
 }
