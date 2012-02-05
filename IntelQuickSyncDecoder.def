@@ -2,3 +2,4 @@ EXPORTS
   createQuickSync
   destroyQuickSync
   getVersion
+  check
