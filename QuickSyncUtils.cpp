@@ -39,7 +39,7 @@
 void* gpu_memcpy(void* d, const void* s, size_t size)
 {
     static bool s_SSE4_1_enabled = IsSSE41Enabled();
-    static const size_t regsInLoop = sizeof(size_t) * 2; // 8 or 16
+    static const size_t regsInLoop = 2;
 
     if (d == NULL || s == NULL) return NULL;
 
@@ -50,14 +50,11 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
         return memcpy(d, s, size);
     }
 
-    __m128i xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7;
-#ifdef _M_X64
-    __m128i xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15;
-#endif
 
-    size_t reminder = size & (regsInLoop * sizeof(xmm0) - 1); // Copy 128 or 256 bytes every loop
+    size_t reminder = size & (regsInLoop * sizeof(__m128i) - 1); // Copy 32 bytes every loop
     size_t end = 0;
 
+    __m128i xmm0, xmm1; // Will actually use xmm registers
     __m128i* pTrg = (__m128i*)d;
     __m128i* pTrgEnd = pTrg + ((size - reminder) >> 4);
     __m128i* pSrc = (__m128i*)s;
@@ -71,42 +68,13 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
         // Fastest method for copying GPU RAM. Available since Penryn (45nm Core 2 Duo/Quad)
         xmm0  = _mm_stream_load_si128(pSrc);
         xmm1  = _mm_stream_load_si128(pSrc + 1);
-        xmm2  = _mm_stream_load_si128(pSrc + 2);
-        xmm3  = _mm_stream_load_si128(pSrc + 3);
-        xmm4  = _mm_stream_load_si128(pSrc + 4);
-        xmm5  = _mm_stream_load_si128(pSrc + 5);
-        xmm6  = _mm_stream_load_si128(pSrc + 6);
-        xmm7  = _mm_stream_load_si128(pSrc + 7);
-#ifdef _M_X64 // Use all 16 xmm registers
-        xmm8  = _mm_stream_load_si128(pSrc + 8);
-        xmm9  = _mm_stream_load_si128(pSrc + 9);
-        xmm10 = _mm_stream_load_si128(pSrc + 10);
-        xmm11 = _mm_stream_load_si128(pSrc + 11);
-        xmm12 = _mm_stream_load_si128(pSrc + 12);
-        xmm13 = _mm_stream_load_si128(pSrc + 13);
-        xmm14 = _mm_stream_load_si128(pSrc + 14);
-        xmm15 = _mm_stream_load_si128(pSrc + 15);
-#endif
         pSrc += regsInLoop;
+
         // _mm_store_si128 emit the SSE2 intruction MOVDQA (aligned store)
         _mm_store_si128(pTrg     , xmm0);
         _mm_store_si128(pTrg +  1, xmm1);
-        _mm_store_si128(pTrg +  2, xmm2);
-        _mm_store_si128(pTrg +  3, xmm3);
-        _mm_store_si128(pTrg +  4, xmm4);
-        _mm_store_si128(pTrg +  5, xmm5);
-        _mm_store_si128(pTrg +  6, xmm6);
-        _mm_store_si128(pTrg +  7, xmm7);
-#ifdef _M_X64 // Use all 16 xmm registers
-        _mm_store_si128(pTrg +  8, xmm8);
-        _mm_store_si128(pTrg +  9, xmm9);
-        _mm_store_si128(pTrg + 10, xmm10);
-        _mm_store_si128(pTrg + 11, xmm11);
-        _mm_store_si128(pTrg + 12, xmm12);
-        _mm_store_si128(pTrg + 13, xmm13);
-        _mm_store_si128(pTrg + 14, xmm14);
-        _mm_store_si128(pTrg + 15, xmm15);
-#endif
+        _mm_store_si128(pTrg +  1, xmm1); // Not a bug - works 4.5% faster!
+        _mm_store_si128(pTrg +  1, xmm1);
         pTrg += regsInLoop;
     }
 
