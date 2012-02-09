@@ -91,6 +91,8 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableMtDecode     = m_Config.bEnableMultithreading;
     m_Config.bEnableMtCopy       = m_Config.bEnableMultithreading;
 
+//    m_Config.bEnableSwEmulation  = true;
+
     // Currently not working well - menu decoding :(
     //m_Config.bEnableDvdDecoding = true;
 
@@ -135,9 +137,12 @@ CQuickSync::~CQuickSync()
     MSDK_SAFE_DELETE(m_pDecoder);
 }
 
-HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
+HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxVideoParam& videoParams, CFrameConstructor*& pFrameConstructor)
 {
-    MSDK_SAFE_DELETE(m_pFrameConstructor);
+    const GUID& subType = mtIn->subtype;
+    const GUID& guidFormat = mtIn->formattype;
+
+    MSDK_SAFE_DELETE(pFrameConstructor);
 
     // MPEG2
     if (subType == MEDIASUBTYPE_MPEG2_VIDEO)
@@ -145,25 +150,23 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
         if (!m_Config.bEnableMPEG2)
             return VFW_E_INVALIDMEDIATYPE;
 
-        m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_MPEG2;
-        m_pFrameConstructor = new CFrameConstructor;
-        return S_OK;
-    }
-    
+        videoParams.mfx.CodecId = MFX_CODEC_MPEG2;
+        pFrameConstructor = new CFrameConstructor;
+    }    
     // VC1 or WMV3
-    if ((fourCC == FOURCC_VC1) || (fourCC == FOURCC_WMV3))
+    else if ((fourCC == FOURCC_VC1) || (fourCC == FOURCC_WMV3))
     {
-        m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_VC1;
+        videoParams.mfx.CodecId = MFX_CODEC_VC1;
 
         if (subType == WMMEDIASUBTYPE_WMV3)
         {
-            m_mfxParamsVideo.mfx.CodecProfile = MFX_PROFILE_VC1_SIMPLE;        
+            videoParams.mfx.CodecProfile = MFX_PROFILE_VC1_SIMPLE;        
             if (!m_Config.bEnableWMV9)
                 return VFW_E_INVALIDMEDIATYPE;
         }   
         else if (fourCC == FOURCC_VC1)
         {
-            m_mfxParamsVideo.mfx.CodecProfile = MFX_PROFILE_VC1_ADVANCED;
+            videoParams.mfx.CodecProfile = MFX_PROFILE_VC1_ADVANCED;
             if (!m_Config.bEnableVC1)
                 return VFW_E_INVALIDMEDIATYPE;
         }
@@ -172,26 +175,50 @@ HRESULT CQuickSync::HandleSubType(const GUID& subType, FOURCC fourCC)
             return VFW_E_INVALIDMEDIATYPE;
         }
 
-        m_pFrameConstructor = new CVC1FrameConstructor();
-        return S_OK;
+        pFrameConstructor = new CVC1FrameConstructor();
     }
-
     // H264
-    if ((fourCC == FOURCC_H264) || (fourCC == FOURCC_X264) || (fourCC == FOURCC_h264) ||
+    else if ((fourCC == FOURCC_H264) || (fourCC == FOURCC_X264) || (fourCC == FOURCC_h264) ||
         (fourCC == FOURCC_avc1) || (fourCC == FOURCC_VSSH) || (fourCC == FOURCC_DAVC) ||
         (fourCC == FOURCC_PAVC) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1))
     {
         if (!m_Config.bEnableH264)
             return VFW_E_INVALIDMEDIATYPE;
 
-        m_mfxParamsVideo.mfx.CodecId = MFX_CODEC_AVC;
-        m_pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
+        videoParams.mfx.CodecId = MFX_CODEC_AVC;
+        pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
             new CAVCFrameConstructor :
             new CFrameConstructor;
-        return S_OK;
+    }
+    else
+    {
+        return E_NOTIMPL;
     }
 
-    return E_UNEXPECTED;
+    // Check if codec profile and level are supported before calling DecodeHeader
+    mfxInfoMFX& mfx = videoParams.mfx;
+    if (FORMAT_MPEG2_VIDEO == guidFormat)
+    {
+        MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(mtIn->pbFormat);
+        HRESULT hr = CheckCodecProfileSupport(mfx.CodecId, mp2->dwProfile, mp2->dwLevel);
+        if (hr != S_OK)
+        {
+            MSDK_TRACE("QSDcoder::InitDecoder - failed due to unsupported codec (%s), profile (%s), level (%i) combination\n",
+                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
+            return E_NOTIMPL;
+        }
+        else
+        {
+            MSDK_TRACE("QSDcoder::InitDecoder - codec (%s), profile (%s), level (%i)\n",
+                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
+        }
+    }
+    else
+    {
+        MSDK_TRACE("QSDcoder::InitDecoder - codec (%s)\n", GetCodecName(mfx.CodecId));
+    }
+
+    return S_OK;
 }
 
 HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
@@ -202,13 +229,13 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         MSDK_TRACE("QSDcoder: TestMediaType was called on an invalid object!\n");
         return E_FAIL;
     }
-
+    
     // Parameter check
     MSDK_CHECK_POINTER(mtIn, E_POINTER);
     MSDK_CHECK_POINTER(mtIn->pbFormat, E_UNEXPECTED);
 
     // Disable DVD playback until it's OK
-    if (mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK)
+    if (MEDIATYPE_DVD_ENCRYPTED_PACK == mtIn->majortype)
     {
         MSDK_TRACE("QSDcoder: DVD decoding is not supported!\n");
         return E_FAIL;
@@ -218,27 +245,25 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         MSDK_TRACE("QSDcoder: Invalid majortype GUID!\n");
         return E_FAIL;
     }
-
-    HRESULT hr;
+    
     VIDEOINFOHEADER2* vih2 = NULL;
-    const GUID& subType = mtIn->subtype;
-    hr = HandleSubType(subType, fourCC);
-    MSDK_CHECK_RESULT_P_RET(hr, S_OK);
-    const GUID& guidFormat = mtIn->formattype;
-
-    size_t nSampleSize, nVideoInfoSize;
-    hr = CopyMediaTypeToVIDEOINFOHEADER2(mtIn, vih2, nVideoInfoSize, nSampleSize);
-    MSDK_CHECK_RESULT_P_RET(hr, S_OK);
-
+    size_t nSampleSize = 0, nVideoInfoSize = 0;
     mfxVideoParam videoParams;
     MSDK_ZERO_VAR(videoParams);
-    mfxInfoMFX& mfx = m_mfxParamsVideo.mfx;
+    CFrameConstructor* pFrameConstructor = NULL;
+    HRESULT hr = DecodeHeader(mtIn, fourCC, pFrameConstructor, vih2, nSampleSize, nVideoInfoSize, videoParams);
+    MSDK_SAFE_DELETE(pFrameConstructor);
+    MSDK_CHECK_RESULT_P_RET(hr, S_OK);
 
-    // Check if codec profile and level are supported before calling DecodeHeader
-    if (FORMAT_MPEG2_VIDEO == guidFormat)
+    // If SW emulation is disabled - check if HW accelaration is supported
+    if (!m_Config.bEnableSwEmulation)
     {
-        MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(mtIn->pbFormat);
-        hr = CheckCodecProfileSupport(mfx.CodecId, mp2->dwProfile, mp2->dwLevel);
+        mfxStatus sts = m_pDecoder->CheckHwAcceleration(&videoParams);
+        if (sts != MFX_ERR_NONE)
+        {
+            MSDK_TRACE("HW accelration is not supported. Aborting");
+            hr = E_FAIL;
+        }
     }
 
     delete[] (mfxU8*)vih2;
@@ -299,30 +324,23 @@ HRESULT CQuickSync::CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, V
     return S_OK;
 }
 
-HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
+HRESULT CQuickSync::DecodeHeader(
+    const AM_MEDIA_TYPE* mtIn,
+    FOURCC fourCC,
+    CFrameConstructor*& pFrameConstructor,
+    VIDEOINFOHEADER2*& vih2,
+    size_t nSampleSize,
+    size_t& nVideoInfoSize,
+    mfxVideoParam& videoParams)
 {
-    MSDK_TRACE("QSDcoder: InitDecoder\n");
-    CQsAutoLock cObjectLock(&m_csLock);
-    m_bNeedToFlush = true;
-    m_bInitialized = true;
-
-    VIDEOINFOHEADER2* vih2 = NULL;
-    mfxStatus sts = MFX_ERR_NONE;
-    mfxInfoMFX& mfx = m_mfxParamsVideo.mfx;
-    HRESULT hr;
-    MSDK_CHECK_POINTER(mtIn, E_POINTER);
-    MSDK_CHECK_POINTER(mtIn->pbFormat, E_UNEXPECTED);
-    bool bIsFields = false;
-
-    if (!(mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK || mtIn->majortype == MEDIATYPE_Video))
-        return VFW_E_INVALIDMEDIATYPE;
-
+    mfxInfoMFX& mfx = videoParams.mfx;
     const GUID& guidFormat = mtIn->formattype;
-    const GUID& subType = mtIn->subtype;
-    hr = HandleSubType(subType, fourCC);
+    HRESULT hr = S_OK;
+    mfxStatus sts = MFX_ERR_NONE;
+     
+    hr = HandleSubType(mtIn, fourCC, videoParams, pFrameConstructor);
     MSDK_CHECK_RESULT_P_RET(hr, S_OK);
 
-    size_t nSampleSize, nVideoInfoSize;
     hr = CopyMediaTypeToVIDEOINFOHEADER2(mtIn, vih2, nVideoInfoSize, nSampleSize);
     MSDK_CHECK_RESULT_P_RET(hr, S_OK);
 
@@ -340,45 +358,13 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         return VFW_E_INVALIDMEDIATYPE;
     }
 
-    // Check if codec profile and level are supported before calling DecodeHeader
-    if (FORMAT_MPEG2_VIDEO == guidFormat)
-    {
-        MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(mtIn->pbFormat);
-        hr = CheckCodecProfileSupport(mfx.CodecId, mp2->dwProfile, mp2->dwLevel);
-        if (hr != S_OK)
-        {
-            MSDK_TRACE("QSDcoder::InitDecoder - failed due to unsupported codec (%s), profile (%s), level (%i) combination\n",
-                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
-            sts = MFX_ERR_UNSUPPORTED;
-            goto done;
-        }
-        else
-        {
-            MSDK_TRACE("QSDcoder::InitDecoder - codec (%s), profile (%s), level (%i)\n",
-                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
-        }
-    }
-    else
-    {
-        MSDK_TRACE("QSDcoder::InitDecoder - codec (%s)\n", GetCodecName(mfx.CodecId));
-    }
-
-    // Setup frame rate from either the media type or the decoded header
-    bIsFields = (vih2->dwInterlaceFlags & AMINTERLACE_IsInterlaced) &&
-        (vih2->dwInterlaceFlags & AMINTERLACE_1FieldPerSample);
-    // Try getting the frame rate from the decoded headers
-    if (0 < vih2->AvgTimePerFrame)
-    {
-        m_TimeManager.SetFrameRate(1e7 / vih2->AvgTimePerFrame, bIsFields);
-    }
-
     // Construct sequence header and decode the sequence header.
     if (nVideoInfoSize < nSampleSize)
     {
-        sts = m_pFrameConstructor->ConstructHeaders(vih2, guidFormat, nSampleSize, nVideoInfoSize);
+        sts = pFrameConstructor->ConstructHeaders(vih2, guidFormat, nSampleSize, nVideoInfoSize);
         if (MFX_ERR_NONE == sts)
         {
-            sts = m_pDecoder->DecodeHeader(&m_pFrameConstructor->GetHeaders(), &m_mfxParamsVideo);
+            sts = m_pDecoder->DecodeHeader(&pFrameConstructor->GetHeaders(), &videoParams);
         }
     }
     // Simple info header (without extra data) or DecodeHeader failed (usually not critical)
@@ -395,15 +381,54 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         mfx.FrameInfo.Height       = (mfxU16)MSDK_ALIGN16(mfx.FrameInfo.CropH);
         mfx.FrameInfo.FourCC       = MFX_FOURCC_NV12;
         mfx.FrameInfo.ChromaFormat = MFX_CHROMAFORMAT_YUV420;
-        ConvertFrameRate(m_TimeManager.GetFrameRate(), 
+        ConvertFrameRate((vih2->AvgTimePerFrame) ? 1e7 / vih2->AvgTimePerFrame : 0, 
             mfx.FrameInfo.FrameRateExtN, 
             mfx.FrameInfo.FrameRateExtD);
     }
 
-    ASSERT(sts == MFX_ERR_NONE);
+    hr = (sts == MFX_ERR_NONE) ? S_OK : E_FAIL;
 
+    if (FAILED(hr))
+    {
+        delete[] (mfxU8*)vih2;
+        vih2 = NULL;
+    }
+    return hr;
+}
+
+HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
+{
+    MSDK_TRACE("QSDcoder: InitDecoder\n");
+    CQsAutoLock cObjectLock(&m_csLock);
+    m_bNeedToFlush = true;
+    m_bInitialized = true;
+
+    VIDEOINFOHEADER2* vih2 = NULL;
+    mfxStatus sts = MFX_ERR_NONE;
+    mfxInfoMFX& mfx = m_mfxParamsVideo.mfx;
+    HRESULT hr;
+    MSDK_CHECK_POINTER(mtIn, E_POINTER);
+    MSDK_CHECK_POINTER(mtIn->pbFormat, E_UNEXPECTED);
+    bool bIsFields = false;
+    size_t nSampleSize = 0, nVideoInfoSize = 0;
+
+    if (!(mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK || mtIn->majortype == MEDIATYPE_Video))
+        return VFW_E_INVALIDMEDIATYPE;
+
+
+    hr = DecodeHeader(mtIn, fourCC, m_pFrameConstructor, vih2, nSampleSize, nVideoInfoSize, m_mfxParamsVideo);
+
+    // Setup frame rate from either the media type or the decoded header
+    bIsFields = (vih2->dwInterlaceFlags & AMINTERLACE_IsInterlaced) &&
+        (vih2->dwInterlaceFlags & AMINTERLACE_1FieldPerSample);
+
+    // Try getting the frame rate from the decoded headers
+    if (0 < vih2->AvgTimePerFrame)
+    {
+        m_TimeManager.SetFrameRate(1e7 / vih2->AvgTimePerFrame, bIsFields);
+    }
     // In case we don't have a frame rate
-    if (mfx.FrameInfo.FrameRateExtN * mfx.FrameInfo.FrameRateExtD != 0)
+    else if (mfx.FrameInfo.FrameRateExtN * mfx.FrameInfo.FrameRateExtD != 0)
     {
         double frameRate = (double)mfx.FrameInfo.FrameRateExtN / (double)mfx.FrameInfo.FrameRateExtD;
         m_TimeManager.SetFrameRate(frameRate, bIsFields);
@@ -453,7 +478,6 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         m_pDecoder->SetConfig(m_Config);
     }
 
-done:
     delete[] (mfxU8*)vih2;
     m_OK = (sts == MFX_ERR_NONE);
     return (m_OK) ? S_OK : E_FAIL;
@@ -1200,7 +1224,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
     // App can modify this buffer
     outFrameData.bReadOnly = false;
-#if 1 // Use this disable actual copying for benchmarking
+#if 1 // Use this to disable actual copying for benchmarking
     Tmemcpy memcpyFunc = (m_pDecoder->IsD3DAlloc()) ?
         ( (m_Config.bEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy ) :
         ( (m_Config.bEnableMtCopy) ? mt_memcpy     : memcpy );
@@ -1219,10 +1243,14 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
 #ifdef _DEBUG
     // Debug only - mark top left corner when working with D3D
-    REFERENCE_TIME mark = (m_pDecoder->IsHwAccelerated()) ? 0x80FF80FF80FF80FF : 0xFF80FF80FF80FF80;
-
-    *((REFERENCE_TIME*)outFrameData.u) = mark; // 4 blue (hw) or red (sw)
-    *((REFERENCE_TIME*)(outFrameData.u + outFrameData.dwStride)) = mark;
+    ULONGLONG markY = 0;
+    ULONGLONG markUV = (m_pDecoder->IsHwAccelerated()) ? 0x80FF80FF80FF80FF : 0xFF80FF80FF80FF80;
+    *((ULONGLONG*)outFrameData.y) = markY;
+    *((ULONGLONG*)(outFrameData.y + outFrameData.dwStride)) = markY;
+    *((ULONGLONG*)(outFrameData.y + 2 * outFrameData.dwStride)) = markY;
+    *((ULONGLONG*)(outFrameData.y + 3 * outFrameData.dwStride)) = markY;
+    *((ULONGLONG*)outFrameData.u) = markUV; // 4 blue (hw) or red (sw)
+    *((ULONGLONG*)(outFrameData.u + outFrameData.dwStride)) = markUV;
 #endif
 
     // Keep or drop the processed frame

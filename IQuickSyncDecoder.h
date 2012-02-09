@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.25 Beta"
+#define QS_DEC_VERSION  "v0.26 Beta"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -114,6 +114,7 @@ struct CQsConfig
             bool     bEnableMtDecode        :  1; // decode on a worker thread
             bool     bEnableMtProcessing    :  1; // perform post decode processing on another thread
             bool     bEnableVideoProcessing :  1;
+            bool     bEnableSwEmulation     :  1; // When true, a SW version of the decoder will be used (if possible) if HW fails
             unsigned reserved1              : 19;
         };
     };

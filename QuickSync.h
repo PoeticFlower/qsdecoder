@@ -45,6 +45,14 @@ protected:
     virtual HRESULT InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC);
     virtual HRESULT Decode(IMediaSample* pIn);
     virtual HRESULT Flush(bool deliverFrames = true);
+    HRESULT DecodeHeader(
+        const AM_MEDIA_TYPE* mtIn,
+        FOURCC fourCC,
+        CFrameConstructor*& pFrameConstructor,
+        VIDEOINFOHEADER2*& vih2,
+        size_t nSampleSize,
+        size_t& nVideoInfoSize,
+        mfxVideoParam& videoParams);
     virtual HRESULT CheckCodecProfileSupport(DWORD codec, DWORD profile, DWORD level);
 
     // Marks the beginning of a flush (discard frames or reset).
@@ -72,7 +80,7 @@ protected:
     }
 
     virtual void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
-    HRESULT HandleSubType(const GUID& subType, FOURCC fourCC);
+    HRESULT HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxVideoParam& videoParams, CFrameConstructor*& pFrameContructor);
     HRESULT CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize);
     HRESULT QueueSurface(mfxFrameSurface1* pSurface, bool async);
     HRESULT ProcessDecodedFrame(mfxFrameSurface1* pSurface);
