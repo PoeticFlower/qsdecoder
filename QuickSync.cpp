@@ -896,7 +896,11 @@ bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData
     // Find corrected time stamp
     if (m_Config.bTimeStampCorrection)
     {
-        if (!m_TimeManager.GetSampleTimeStamp(pSurface, m_pDecoder->GetOutputQueue(), frameData.rtStart, frameData.rtStop))
+        TFrameVector frames;
+        frames.push_back(pSurface);
+        auto queue = m_pDecoder->GetOutputQueue();
+        frames.insert(frames.end(), queue.begin(), queue.end());
+        if (!m_TimeManager.GetSampleTimeStamp(frames, frameData.rtStart, frameData.rtStop))
             return false;
     
         return frameData.rtStart >= 0;
