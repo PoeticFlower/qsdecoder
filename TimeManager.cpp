@@ -45,29 +45,26 @@ void CDecTimeManager::Reset()
     m_nSegmentSampleCount = 0;
     m_OutputTimeStamps.clear();
     m_bValidFrameRate = false;
+    m_bCalculatedPts = false;
     m_nLastSeenFieldDoubling = 0;
     m_rtPrevStart = INVALID_REFTIME;
     m_bIsSampleInFields = false;
     SetInverseTelecine(false);
 }
 
-bool CDecTimeManager::CalcFrameRate(const mfxFrameSurface1* pSurface,
-                                    const std::deque<mfxFrameSurface1*>& queue)
+bool CDecTimeManager::CalcPtsOrder(const TFrameVector& frames)
 {
-    if (m_bValidFrameRate)
+    if (m_bCalculatedPts)
         return true;
 
-    m_dFrameRate = m_dOrigFrameRate;
-
-    // first thing, find if the time stamps are PTS (presentation) or DTS (decoding).
+    // Find if the time stamps are PTS (presentation) or DTS (decoding).
     // PTS time stamps are monotonic.
     // this is important for deriving correct time stamp in GetSampleTimeStamp
-    REFERENCE_TIME rtCurrent = GetSampleRefTime(pSurface);
     m_bIsPTS = true;
-    REFERENCE_TIME prevStart = rtCurrent;
-    for (auto it = queue.begin(); it != queue.end(); ++it)
+    REFERENCE_TIME prevStart = GetSampleRefTime(frames[0]);
+    for (size_t i = 1; i < frames.size(); ++i)
     {
-        const REFERENCE_TIME& rtStart = GetSampleRefTime(*it);
+        const REFERENCE_TIME& rtStart = GetSampleRefTime(frames[i]);
         if (INVALID_REFTIME != prevStart)
         {
             // not montonic:
@@ -81,75 +78,6 @@ bool CDecTimeManager::CalcFrameRate(const mfxFrameSurface1* pSurface,
         prevStart = rtStart;
     }
 
-    // check validity of time stamps
-    set<REFERENCE_TIME> sampleTimesSet;
-    int duplicates = 0, invalids = 0;
-
-    if (rtCurrent != INVALID_REFTIME)
-    {
-        sampleTimesSet.insert(rtCurrent);
-    }
-    else
-    {
-        ++invalids;
-    }
-
-    for (auto it = queue.begin(); it != queue.end(); ++it)
-    {
-        REFERENCE_TIME rtStart = GetSampleRefTime(*it);
-        if (rtStart != INVALID_REFTIME)
-        {
-            // note: insert return pair<iterator, bool>. the bool field is true when item was added. otherwise false (item exists)
-            duplicates += (false == (sampleTimesSet.insert(rtStart)).second);
-        }
-        else
-        {
-            ++invalids;
-        }
-    }
-
-    double avgFrameRate = m_dFrameRate;
-
-    // need enough samples for average frame rate calculation
-    if (sampleTimesSet.size() > 8)
-    {
-        // find average frame rate (ignore current frame - sometimes wrong values):
-        REFERENCE_TIME rtStart = *(sampleTimesSet.begin());  // lowest
-        REFERENCE_TIME rtStop  = *(sampleTimesSet.rbegin()); // highest time stamp
-
-        // TODO: account for newest frames being invalid or duplicates
-        avgFrameRate = (1e7 * (m_OutputTimeStamps.size() - 1)) / // multiply by the count of all frames -1
-            (double)(rtStop - rtStart);
-    }
-
-    // got something that look like a valid frame rate.
-    // check if this is related to the actual time stamps.
-    if (m_dFrameRate > 1.0)
-    {
-        // check if samples are inputted as fields not frames. frame rate might be artificially doubled
-        if (InRange(m_dFrameRate, avgFrameRate * 1.9,  avgFrameRate * 2.1) &&
-            pSurface->Info.PicStruct != MFX_PICSTRUCT_PROGRESSIVE)
-        {
-            m_dFrameRate /= 2;
-        }
-
-        // need extra handling?
-    }
-    // use original time stamps
-    else if (m_bIsPTS)
-    {
-        m_dFrameRate = 0;
-    }
-    // need to calc frame rate :(
-    // this isn't optimal.
-    else
-    {
-        // use average frame rate
-        m_dFrameRate = avgFrameRate;
-    }
-
-    MSDK_TRACE("QsDecoder: frame rate is %0.2f\n", (float)(m_dFrameRate));
-    m_bValidFrameRate = true;
     return true;
 }
 
@@ -174,14 +102,24 @@ void CDecTimeManager::SetInverseTelecine(bool bIvtc)
     }
 }
 
-bool CDecTimeManager::GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
-                                         const std::deque<mfxFrameSurface1*>& queue,
+bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
                                          REFERENCE_TIME& rtStart,
                                          REFERENCE_TIME& rtStop)
 {
-    if (!m_bValidFrameRate)
+    if (frames.empty())
+        return false;
+
+    const mfxFrameSurface1* pSurface = frames[0];
+    if (!m_bCalculatedPts)
     {
-        CalcFrameRate(pSurface, queue);
+        CalcPtsOrder(frames);
+    }
+
+    // Check if frame rate has changed
+    double tmpFrameRate;
+    if (CalcCurrentFrameRate(tmpFrameRate, frames.size()))
+    {
+        FixFrameRate(tmpFrameRate);
     }
 
     bool bFieldDoubling = (0 != (pSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_REPEATED));
@@ -243,10 +181,10 @@ bool CDecTimeManager::GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
                 rtStart = *(m_OutputTimeStamps.begin());
 
                 // Find distance from current sample
-                for (auto it = queue.begin(); it != queue.end(); ++it)
+                for (size_t i = 1; i < frames.size(); ++i)
                 {
                     ++count;
-                    REFERENCE_TIME t = GetSampleRefTime(*it);
+                    REFERENCE_TIME t = GetSampleRefTime(frames[i]);
                     if (rtStart == t)
                     {
                         break;
@@ -282,13 +220,6 @@ bool CDecTimeManager::GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
     // 2nd and above frames
     else 
     {
-        // Check if frame rate has changed
-        double tmpFrameRate;
-        if (CalcCurrentFrameRate(tmpFrameRate, 1 + queue.size()))
-        {
-            FixFrameRate(tmpFrameRate);
-        }
-
         if (m_dFrameRate > 0 || INVALID_REFTIME == rtDecoder)
         {
             rtStart = m_rtPrevStart + (REFERENCE_TIME)(0.5 + 1e7 / m_dFrameRate);
@@ -360,9 +291,9 @@ void CDecTimeManager::FixFrameRate(double frameRate)
     MSDK_TRACE("QsDecoder: frame rate is %0.3f\n", (float)(m_dFrameRate));
 }
 
-bool CDecTimeManager::CalcCurrentFrameRate(double& tmpFrameRate, size_t nQueuedFrames)
+bool CDecTimeManager::CalcCurrentFrameRate(double& frameRate, size_t nQueuedFrames)
 {
-    tmpFrameRate = 0;
+    frameRate = 0;
     size_t len = m_OutputTimeStamps.size();
 
     // Need enough frames and that the time stamps are all valid.
@@ -404,30 +335,30 @@ bool CDecTimeManager::CalcCurrentFrameRate(double& tmpFrameRate, size_t nQueuedF
     if (!accurateFR)
         return false;
 
-    tmpFrameRate = (1e7 * len) / (*m_OutputTimeStamps.rbegin() - *m_OutputTimeStamps.begin());
-    if (fabs(tmpFrameRate - m_dFrameRate) > 1)
+    frameRate = (1e7 * len) / (*m_OutputTimeStamps.rbegin() - *m_OutputTimeStamps.begin());
+    if (fabs(frameRate - m_dFrameRate) > 1)
     {
         // Fine tune the frame rate
         // Try NTSC ranges
-        if (InRange(m_dFrameRate, 59.93, 59.95) || InRange(m_dFrameRate, 29.96, 29.98) || InRange(m_dFrameRate, 23.96, 23.98))
+        if (m_dFrameRate == 0 /* no known frame rate */ || InRange(m_dFrameRate, 59.93, 59.95) || InRange(m_dFrameRate, 29.96, 29.98) || InRange(m_dFrameRate, 23.96, 23.98))
         {
-            if (InRange(tmpFrameRate, 28.0, 32.0))
+            if (InRange(frameRate, 28.0, 32.0))
             {
-                tmpFrameRate = fps2997;
+                frameRate = fps2997;
             }
-            else if (InRange(tmpFrameRate, 22.0, 26.0))
+            else if (InRange(frameRate, 22.0, 26.0))
             {
-                tmpFrameRate = fps23976;
+                frameRate = fps23976;
             }
             else
             {
-                tmpFrameRate = floor(tmpFrameRate + 0.5);
+                frameRate = floor(frameRate + 0.5);
             }
         }
         // PC/PAL ranges
         else
         {
-            tmpFrameRate = floor(tmpFrameRate + 0.5);
+            frameRate = floor(frameRate + 0.5);
         }
 
         return true;
