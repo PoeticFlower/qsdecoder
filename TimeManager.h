@@ -46,7 +46,7 @@ struct TTimeStampInfo
 
 typedef std::deque<TTimeStampInfo> TTimeStampQueue;
 typedef std::multiset<REFERENCE_TIME> TSortedTimeStamps;
-
+typedef std::vector<mfxFrameSurface1*> TFrameVector;
 
 class CDecTimeManager
 {
@@ -59,9 +59,17 @@ public:
     double  GetFrameRate() { return m_dFrameRate; }
     void    SetFrameRate(double frameRate, bool bIsFields)
     {
-        m_dFrameRate = (bIsFields && frameRate < 30.0) ? (frameRate / 2) : frameRate;
-        m_dOrigFrameRate = m_dFrameRate;
         m_bIsSampleInFields = bIsFields;
+        // Check for invalid values
+        if (frameRate < 1 || frameRate > 125)
+        {
+            m_dFrameRate = 0;
+        }
+        else
+        {
+            m_dFrameRate = (bIsFields && frameRate < 30.0) ? (frameRate / 2) : frameRate;
+        }
+        m_dOrigFrameRate = m_dFrameRate;
         MSDK_TRACE("QsDecoder: frame rate is %0.2f\n", (float)(m_dFrameRate));
     }
 
@@ -83,7 +91,7 @@ public:
         if (MFX_TIME_STAMP_INVALID == nTime)
             return (REFERENCE_TIME)INVALID_REFTIME;
 
-        mfxI64 t = (mfxI64)nTime; // don't lose the sign
+        mfxI64 t = (mfxI64)nTime; // Don't lose the sign
 
         if (t < -MFX_TIME_STAMP_MAX || t > MFX_TIME_STAMP_MAX)
             return (REFERENCE_TIME)INVALID_REFTIME;
@@ -92,10 +100,8 @@ public:
     }
 
     void AddOutputTimeStamp(mfxFrameSurface1* pSurface);
-    bool CalcFrameRate(const mfxFrameSurface1* pSurface,
-                       const std::deque<mfxFrameSurface1*>& queue);
-    bool GetSampleTimeStamp(const mfxFrameSurface1* pSurface,
-                            const std::deque<mfxFrameSurface1*>& queue,
+    bool CalcPtsOrder(const TFrameVector& frames);
+    bool GetSampleTimeStamp(const TFrameVector& frames,
                             REFERENCE_TIME& rtStart,
                             REFERENCE_TIME& rtStop);
     bool IsSampleInFields() { return m_bIsSampleInFields; }
@@ -106,14 +112,15 @@ public:
 
 protected:
     void FixFrameRate(double frameRate);
-    bool CalcCurrentFrameRate(double& tmpFrameRate, size_t nQueuedFrames);
+    bool CalcCurrentFrameRate(double& frameRate, size_t nQueuedFrames);
 
     double m_dOrigFrameRate;
     double m_dFrameRate;
     bool   m_bValidFrameRate;
     bool   m_bIvtc;
     int    m_nLastSeenFieldDoubling;
-    bool   m_bIsPTS; // true for Presentation Time Stamps (source). output is always PTS.
+    bool   m_bIsPTS; // True for Presentation Time Stamps (input time stamps). Output is always PTS.
+    bool   m_bCalculatedPts;
     int    m_nSegmentSampleCount;
     int    m_nOutputFrames;
     bool   m_bIsSampleInFields;

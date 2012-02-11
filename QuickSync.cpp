@@ -78,7 +78,7 @@ CQuickSync::CQuickSync() :
 
     // Set default configuration - override what's not zero
     m_Config.bMod16Width = false;
-    m_Config.bTimeStampCorrection = true;
+//    m_Config.bTimeStampCorrection = true;
 
     m_Config.nOutputQueueLength = (m_Config.bTimeStampCorrection) ? 8 : 0;
     m_Config.bEnableH264  = true;
@@ -104,7 +104,7 @@ CQuickSync::~CQuickSync()
     MSDK_TRACE("QSDcoder: Destructor\n");
     
     // This will quicken the exit 
-    m_bNeedToFlush = true;
+    BeginFlush();
 
     CQsAutoLock cObjectLock(&m_csLock);
 
