@@ -47,7 +47,8 @@ EXTERN_GUID(WMMEDIASUBTYPE_WMV3,
 DEFINE_GUID(WMMEDIASUBTYPE_WVC1_PDVD,
 0xD979F77B, 0xDBEA, 0x4BF6, 0x9E, 0x6D, 0x1D, 0x7E, 0x57, 0xFB, 0xAD, 0x53);
 
-#define QUEUE_LENGTH 2
+#define DECODE_QUEUE_LENGTH 8
+#define PROCESS_QUEUE_LENGTH 2
 
 ////////////////////////////////////////////////////////////////////
 //                      CQuickSync
@@ -62,9 +63,9 @@ CQuickSync::CQuickSync() :
     m_bDvdDecoding(false),
     m_hProcessorWorkerThread(NULL),
     m_ProcessorWorkerThreadId(0),
-    m_DecodedFramesQueue(QUEUE_LENGTH),
-    m_ProcessedFramesQueue(QUEUE_LENGTH),
-    m_FreeFramesPool(QUEUE_LENGTH)
+    m_DecodedFramesQueue(DECODE_QUEUE_LENGTH),
+    m_ProcessedFramesQueue(PROCESS_QUEUE_LENGTH),
+    m_FreeFramesPool(PROCESS_QUEUE_LENGTH)
 {
     MSDK_TRACE("QSDcoder: Constructor\n");
 
@@ -80,7 +81,7 @@ CQuickSync::CQuickSync() :
     m_Config.bMod16Width = false;
 //    m_Config.bTimeStampCorrection = true;
 
-    m_Config.nOutputQueueLength = (m_Config.bTimeStampCorrection) ? 8 : 0;
+    m_Config.nOutputQueueLength = 16;
     m_Config.bEnableH264  = true;
     m_Config.bEnableMPEG2 = true;
     m_Config.bEnableVC1   = true;
@@ -96,6 +97,7 @@ CQuickSync::CQuickSync() :
     // Currently not working well - menu decoding :(
     //m_Config.bEnableDvdDecoding = true;
 
+    m_pDecoder->SetAuxFramesCount(m_Config.nOutputQueueLength + DECODE_QUEUE_LENGTH);
     m_OK = (sts == MFX_ERR_NONE);
 }
 
@@ -1119,7 +1121,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
         PushSurface(pSurface);
 
         // Not enough surfaces for proper time stamp correction
-        size_t queueSize = (m_bDvdDecoding || !m_Config.bTimeStampCorrection) ? 0 : m_Config.nOutputQueueLength;
+        size_t queueSize = (m_bDvdDecoding) ? 0 : m_Config.nOutputQueueLength;
         if (m_pDecoder->OutputQueueSize() < queueSize)
         {
             return S_OK;

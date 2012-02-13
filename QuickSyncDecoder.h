@@ -163,6 +163,11 @@ public:
         m_AsyncDecodeInfo.lock.Wait(INFINITE);
     }
 
+    void SetAuxFramesCount(size_t count)
+    {
+        m_nAuxFrameCount = (mfxU16)count;
+    }
+
 protected:
     mfxStatus         InternalReset(mfxVideoParam* pVideoParams, mfxU32 nPitch, bool bInited);
     mfxFrameSurface1* FindFreeSurface();
@@ -195,6 +200,7 @@ protected:
     mfxU16                m_nRequiredFramesNum;
     int                   m_nLastSurfaceId;
     bool                  m_bUseD3DAlloc;
+    mfxU16                m_nAuxFrameCount;
 
     // D3D/DXVA interfaces
     IDirect3DDeviceManager9* m_pRendererD3dDeviceManager;

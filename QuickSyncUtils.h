@@ -100,21 +100,18 @@ private:
 class CQsEvent
 {
 public:
-    CQsEvent(bool bSignaled = true, bool bManual = true) : m_bManual(bManual)
+    CQsEvent(bool bSignaled = true, bool bManual = true)
     {
         m_hEvent = CreateEvent(NULL, (BOOL)bManual, (BOOL)bSignaled, NULL);
-        m_bLocked = (m_bManual) ? !bSignaled : true /* auto is always locked */;
     }
 
     __forceinline void Lock()
     {
         ResetEvent(m_hEvent);
-        m_bLocked = true;
     }
     __forceinline void Unlock()
     {
         SetEvent(m_hEvent);
-        m_bLocked = !m_bManual;
     }
 
     bool Wait(DWORD dwMilliseconds = INFINITE)
@@ -126,8 +123,6 @@ public:
 
 private:
     HANDLE m_hEvent;
-    const bool m_bManual;
-    bool m_bLocked;
 };
 
 // Locks a critical section, and unlocks it automatically
@@ -196,17 +191,19 @@ public:
         CQsAutoLock lock(this);
     }
 
-    bool PushBack(const T& item, DWORD dwMiliSecs)
+    inline bool PushBack(const T& item, DWORD dwMiliSecs)
     {
         if (dwMiliSecs > 0 && !WaitForCapacity(dwMiliSecs))
             return false; // timeout
 
         {
             CQsAutoLock lock(this);
-            ++m_Size;
-
             // Not empty anymore
-            m_NotEmptyEvent.Unlock();
+            if (m_Size++ == 0)
+            {
+                m_NotEmptyEvent.Unlock();
+            }
+
             m_Queue.push_back(item);
 
             // Out of capacity
