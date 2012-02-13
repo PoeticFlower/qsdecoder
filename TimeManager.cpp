@@ -78,6 +78,7 @@ bool CDecTimeManager::CalcPtsOrder(const TFrameVector& frames)
         prevStart = rtStart;
     }
 
+    m_bCalculatedPts = true;
     return true;
 }
 

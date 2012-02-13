@@ -79,7 +79,7 @@ CQuickSync::CQuickSync() :
 
     // Set default configuration - override what's not zero
     m_Config.bMod16Width = false;
-//    m_Config.bTimeStampCorrection = true;
+    m_Config.bTimeStampCorrection = true;
 
     m_Config.nOutputQueueLength = 16;
     m_Config.bEnableH264  = true;
