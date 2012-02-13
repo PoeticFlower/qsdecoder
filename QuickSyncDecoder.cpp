@@ -62,6 +62,7 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     m_pFrameSurfaces(NULL),
     m_nRequiredFramesNum(0),
     m_nLastSurfaceId(0),
+    m_nAuxFrameCount(0),
     m_pRendererD3dDeviceManager(NULL),
     m_pD3dDeviceManager(NULL),
     m_pD3dDevice(NULL),
@@ -183,7 +184,7 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
     MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
-    allocRequest.NumFrameSuggested = (mfxU16)m_Config.nOutputQueueLength + allocRequest.NumFrameSuggested + 1;
+    allocRequest.NumFrameSuggested = (mfxU16)m_nAuxFrameCount + allocRequest.NumFrameSuggested;
     allocRequest.NumFrameMin = allocRequest.NumFrameSuggested;
 
     // Decide memory type
