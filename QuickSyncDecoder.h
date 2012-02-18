@@ -133,10 +133,7 @@ public:
 
         if (i < m_nRequiredFramesNum)
         {
-            if (0 > InterlockedDecrement(&m_LockedSurfaces[i]))
-            {
-                ASSERT(m_LockedSurfaces[i] >= 0);
-            }
+            InterlockedDecrement(&m_LockedSurfaces[i]);
         }
     }
 

@@ -198,6 +198,10 @@ public:
 
         {
             CQsAutoLock lock(this);
+
+            if (m_Size == m_Capacity)
+                return false;
+
             // Not empty anymore
             if (m_Size++ == 0)
             {
@@ -212,18 +216,20 @@ public:
                 m_CapacityEvent.Lock();
             }
         }
+
         return true;
     }
 
     inline bool PopFront(T& res, DWORD dwMiliSecs)
     {
         if (dwMiliSecs > 0 && !WaitForNotEmpty(dwMiliSecs))
-            return false;
+            return false; // timeout
 
+        if (m_Size == 0)
+            return false;
         {
+
             CQsAutoLock lock(this);
-            if (m_Size == 0)
-                return false;
 
             --m_Size;
             res = m_Queue.front();
@@ -241,6 +247,7 @@ public:
                 m_CapacityEvent.Unlock();
             }
         }
+
         return true;
     }
 
@@ -251,20 +258,17 @@ public:
 
     __forceinline size_t GetCapacity()
     {
-        CQsAutoLock lock(this);
         return m_Capacity;
     }
 
     __forceinline bool HasCapacity()
     {
-        CQsAutoLock lock(this);
         return m_Size < m_Capacity;
     }
     
     __forceinline bool Empty()
     {
-        CQsAutoLock lock(this);
-        return m_Queue.empty();
+        return 0 == m_Size;
     }
 
     inline bool WaitForCapacity(DWORD dwMiliSecs)
