@@ -140,20 +140,17 @@ mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
     // 1 second cycle
     for (int tries = 0; tries < 1000; ++tries)
     {
+        for (int i = 0; i < m_nRequiredFramesNum; ++i)
         {
-            for (int i = (m_nLastSurfaceId + 1) % m_nRequiredFramesNum; i != m_nLastSurfaceId;)
+            if (!IsSurfaceLocked(&m_pFrameSurfaces[i]))
             {
-                if (!IsSurfaceLocked(&m_pFrameSurfaces[i]))
-                {
-                    // Found free surface :)
-                    m_nLastSurfaceId = (++m_nLastSurfaceId) % m_nRequiredFramesNum;
-                    return &m_pFrameSurfaces[i];
-                }
-
-                i = (++i) % m_nRequiredFramesNum;
+                // Found free surface :)
+                m_nLastSurfaceId = (++m_nLastSurfaceId) % m_nRequiredFramesNum;
+                return m_pFrameSurfaces + i;
             }
         }
 
+        // Note: code should not reach here!
         MSDK_TRACE("QSDcoder: FindFreeSurface - all surfaces are in use, retrying in 1ms (%d)\n", ++s_SleepCount);
         Sleep(1);
     }
@@ -350,9 +347,6 @@ mfxStatus CQuickSyncDecoder::CheckHwAcceleration(mfxVideoParam* pVideoParams)
     MSDK_CHECK_POINTER(pVideoParams, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(m_pmfxDEC, MFX_ERR_NOT_INITIALIZED);
 
-    mfxFrameAllocRequest allocRequest;
-    MSDK_ZERO_VAR(allocRequest);
-
     // If we are already using SW decoder then no need for further checks...
     mfxIMPL impl = QueryIMPL();
     if (MFX_IMPL_SOFTWARE == impl)
@@ -360,7 +354,8 @@ mfxStatus CQuickSyncDecoder::CheckHwAcceleration(mfxVideoParam* pVideoParams)
 
     mfxU16 ioPaternSave = pVideoParams->IOPattern;
     pVideoParams->IOPattern = (mfxU16)MFX_IOPATTERN_OUT_VIDEO_MEMORY;
-    mfxStatus sts = m_pmfxDEC->QueryIOSurf(pVideoParams, &allocRequest);
+    mfxVideoParam tmp = *pVideoParams;
+    mfxStatus sts = m_pmfxDEC->Query(pVideoParams, &tmp);
     pVideoParams->IOPattern = ioPaternSave;
     return sts;
 }
@@ -395,7 +390,7 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
         }
         else if (MFX_WRN_DEVICE_BUSY == sts)
         {
-            Sleep(1);
+            SwitchToThread();
         }
     } while (MFX_WRN_DEVICE_BUSY == sts || MFX_ERR_MORE_SURFACE == sts);
 
@@ -785,6 +780,7 @@ unsigned CQuickSyncDecoder::DecoderWorkerThreadMsgLoop()
             if (sts == MFX_ERR_NONE)
             {
                 ASSERT(m_OnDecodeComplete != NULL && m_Parent != NULL);
+                LockSurface(m_AsyncDecodeInfo.pSurface);
                 m_OnDecodeComplete(m_AsyncDecodeInfo.pSurface, m_Parent);
             }
 

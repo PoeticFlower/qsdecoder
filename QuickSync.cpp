@@ -47,7 +47,7 @@ EXTERN_GUID(WMMEDIASUBTYPE_WMV3,
 DEFINE_GUID(WMMEDIASUBTYPE_WVC1_PDVD,
 0xD979F77B, 0xDBEA, 0x4BF6, 0x9E, 0x6D, 0x1D, 0x7E, 0x57, 0xFB, 0xAD, 0x53);
 
-#define DECODE_QUEUE_LENGTH 8
+#define DECODE_QUEUE_LENGTH 16
 #define PROCESS_QUEUE_LENGTH 2
 
 ////////////////////////////////////////////////////////////////////
@@ -77,27 +77,26 @@ CQuickSync::CQuickSync() :
     //m_mfxParamsVideo.AsyncDepth = 1; //causes issues when 1
     m_mfxParamsVideo.mfx.ExtendedPicStruct = 1;
 
-    // Set default configuration - override what's not zero
-    m_Config.bMod16Width = false;
+    // Set default configuration - override what's not zero/false
+//    m_Config.bMod16Width = true;
     m_Config.bTimeStampCorrection = true;
 
-    m_Config.nOutputQueueLength = 16;
+    m_Config.nOutputQueueLength = 8;
     m_Config.bEnableH264  = true;
     m_Config.bEnableMPEG2 = true;
     m_Config.bEnableVC1   = true;
     m_Config.bEnableWMV9  = true;
 
     m_Config.bEnableMultithreading = true;
-    m_Config.bEnableMtProcessing = m_Config.bEnableMultithreading;
-    m_Config.bEnableMtDecode     = m_Config.bEnableMultithreading;
-    m_Config.bEnableMtCopy       = m_Config.bEnableMultithreading;
+    m_Config.bEnableMtProcessing   = m_Config.bEnableMultithreading;
+    m_Config.bEnableMtDecode       = m_Config.bEnableMultithreading;
+    m_Config.bEnableMtCopy         = m_Config.bEnableMultithreading;
 
 //    m_Config.bEnableSwEmulation  = true;
 
     // Currently not working well - menu decoding :(
     //m_Config.bEnableDvdDecoding = true;
 
-    m_pDecoder->SetAuxFramesCount(m_Config.nOutputQueueLength + DECODE_QUEUE_LENGTH);
     m_OK = (sts == MFX_ERR_NONE);
 }
 
@@ -468,7 +467,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         for (unsigned i = 0; i < queueCapacity; ++i)
         {
             TQsQueueItem item(new QsFrameData, new CQsAlignedBuffer(0));
-            m_FreeFramesPool.PushBack(item, 0);
+            m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
         }
     }
 
@@ -478,6 +477,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (sts == MFX_ERR_NONE)
     {
         m_pDecoder->SetConfig(m_Config);
+        m_pDecoder->SetAuxFramesCount(max(8, m_Config.nOutputQueueLength) + DECODE_QUEUE_LENGTH);
     }
 
     delete[] (mfxU8*)vih2;
@@ -540,15 +540,6 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     // Deliver ready surfaces
     DeliverSurface(false);
 
-    // Wait for worker thread to become less busy (decoded frames queue is not full)
-    while (!m_DecodedFramesQueue.WaitForCapacity(10))
-    {
-        if (m_bNeedToFlush)
-        {
-            return S_OK;
-        }
-    }
-
     MSDK_CHECK_NOT_EQUAL(m_OK, true, E_UNEXPECTED);
     HRESULT hr = S_OK;
     mfxStatus sts = MFX_ERR_NONE;
@@ -582,11 +573,13 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
 
         if (MFX_ERR_NONE == sts)
         {
+            // Sync decode - pSurfaceOut holds decoded surface
             if (NULL != pSurfaceOut)
             {
-                // Lock the surface so it will not be used by decoder->FindFreeSurface
+                // Queue the frame for processing
                 QueueSurface(pSurfaceOut, true);
             }
+            // Async decode - flow continues on another thread
             else
             {
                 // Make sure various queues are flushed (avoid deadlock)
@@ -816,7 +809,7 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
 
 void CQuickSync::FlushOutputQueue()
 {
-    // Wait for async deocder to become available
+    // Wait for async decoder to become available
     m_pDecoder->WaitForDecoder();
 
     // Note that m_bNeedToFlush can be changed by another thread at any time
@@ -856,7 +849,7 @@ void CQuickSync::ClearQueue()
     {
         if (m_ProcessedFramesQueue.PopFront(item, 10))
         {
-            m_FreeFramesPool.PushBack(item, 0); // We know there's room
+            m_FreeFramesPool.PushBack(item, 0);  // No need to wait - we know there's room
         }
     }
 }
@@ -1078,6 +1071,8 @@ unsigned CQuickSync::ProcessorWorkerThreadMsgLoop()
     return 0;
 }
 
+// This function queues decoded frame for processing.
+// Only called when decoding is not async.
 HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
 {
     // The surface is locked from being reused in another Decode call
@@ -1091,8 +1086,9 @@ HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
         // Post message to worker thread
         m_DecodedFramesQueue.PushBack(pSurface, INFINITE);
         PostThreadMessage(m_ProcessorWorkerThreadId, TM_PROCESS_FRAME, 0, 0);
-        DeliverSurface(false /* don't wait*/);
+        DeliverSurface(false /* don't wait deliver what's ready */);
     }
+    // MT frame processing is disabled
     else
     {
         ProcessDecodedFrame(pSurface);
@@ -1112,7 +1108,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     {
         // Initial frames with invalid times are discarded
         REFERENCE_TIME rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
-        if (m_pDecoder->OutputQueueEmpty() &&  rtStart == INVALID_REFTIME && m_Config.bTimeStampCorrection)
+        if (m_pDecoder->OutputQueueEmpty() && rtStart == INVALID_REFTIME && m_Config.bTimeStampCorrection)
         {
             m_pDecoder->UnlockSurface(pSurface);
             return S_OK;
@@ -1122,7 +1118,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
         // Not enough surfaces for proper time stamp correction
         size_t queueSize = (m_bDvdDecoding) ? 0 : m_Config.nOutputQueueLength;
-        if (m_pDecoder->OutputQueueSize() < queueSize)
+        if (m_pDecoder->OutputQueueSize() <= queueSize)
         {
             return S_OK;
         }
@@ -1133,9 +1129,12 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     MSDK_CHECK_POINTER(pSurface, S_OK); // Decoder queue is empty - return without error
     
     TQsQueueItem item;
-    while (!m_FreeFramesPool.PopFront(item, 10))
+    while (!m_FreeFramesPool.PopFront(item, 2))
     {
-        // A flush event has just occured - abort frame processing
+//        static int count = 0;
+//        MSDK_TRACE("** waiting for m_FreeFramesPool %d\n", ++count);
+
+        // A flush event has just occurred - abort frame processing
         if (m_bNeedToFlush)
         {
             m_pDecoder->UnlockSurface(pSurface);
@@ -1153,16 +1152,15 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     UpdateAspectRatio(pSurface, outFrameData);
     outFrameData.fourCC = pSurface->Info.FourCC;
 
-    outFrameData.bCorrupted = 0 != pSurface->Data.Corrupted;
     if (pSurface->Data.Corrupted)
     {
         // Do something with a corrupted surface?
-        MSDK_TRACE("QQsDecoder: warning received a corrupted frame\n");
-        pSurface->Data.Corrupted = pSurface->Data.Corrupted;
+        outFrameData.bCorrupted = true;
+        MSDK_TRACE("QsDecoder: warning received a corrupted frame\n");
     }
 
     ++m_nSegmentFrameCount;
-
+     
     // Result is in m_FrameData
     // False return value means that the frame has a negative time stamp and should not be displayed.
     if (!SetTimeStamp(pSurface, outFrameData))
@@ -1236,11 +1234,12 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
         ( (m_Config.bEnableMtCopy) ? mt_memcpy     : memcpy );
 
     // Copy Y
-    memcpyFunc(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
+    !m_bNeedToFlush && memcpyFunc(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
 
     // Copy UV
-    memcpyFunc(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
+    !m_bNeedToFlush && memcpyFunc(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
 #endif
+
     // Unlock the frame
     m_pDecoder->UnlockFrame(pSurface, &frameData);
 
@@ -1288,12 +1287,6 @@ void CQuickSync::OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj)
     // Note - this function is called from the decode thread.
     CQuickSync* pThis = (CQuickSync*)obj;
     ASSERT(pThis != NULL);
-
-    // The surface is locked from being reused in another Decode call
-    if (NULL != pSurface)
-    {
-        pThis->m_pDecoder->LockSurface(pSurface);
-    }
 
     // Post message to worker thread
     pThis->m_DecodedFramesQueue.PushBack(pSurface, INFINITE);
