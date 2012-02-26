@@ -85,7 +85,7 @@ protected:
     HRESULT QueueSurface(mfxFrameSurface1* pSurface, bool async);
     HRESULT ProcessDecodedFrame(mfxFrameSurface1* pSurface);
     void    ClearQueue();
-    HRESULT DeliverSurface(bool bWaitForCompletion);
+    int DeliverSurface(bool bWaitForCompletion);
     virtual void SetDeliverSurfaceCallback(void* obj, TQS_DeliverSurfaceCallback func)
     {
         CQsAutoLock cObjectLock(&m_csLock);
