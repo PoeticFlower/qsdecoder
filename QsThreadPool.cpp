@@ -129,7 +129,10 @@ HRESULT CQsThreadPool::doRun(IQsTask* pTask)
         // Wait for worker threads to become ready
         while (m_nRunningThreadsCount != m_nThreadCount)
         {
-//            SwitchToThread();
+             _mm_pause();
+             _mm_pause();
+             _mm_pause();
+             _mm_pause();
         }
 
         m_WorkFinishedEvent.Lock();

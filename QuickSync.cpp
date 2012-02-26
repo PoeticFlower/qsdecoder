@@ -538,7 +538,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     }
 
     // Deliver ready surfaces
-    DeliverSurface(false);
+    int sentFrames = (m_ProcessedFramesQueue.HasCapacity()) ? 0 : DeliverSurface(false);
 
     MSDK_CHECK_NOT_EQUAL(m_OK, true, E_UNEXPECTED);
     HRESULT hr = S_OK;
@@ -583,7 +583,10 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             else
             {
                 // Make sure various queues are flushed (avoid deadlock)
-                DeliverSurface(false);
+                if (!m_ProcessedFramesQueue.HasCapacity())
+                {
+                    sentFrames += DeliverSurface(false);
+                }
             }
 
             continue;
@@ -642,7 +645,8 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             if (MFX_ERR_NONE == sts)
             {
                 continue;
-            }            
+            }
+
             MSDK_TRACE("QSDcoder: Decode didn't recover from MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
         }
 
@@ -657,15 +661,20 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     MSDK_SAFE_DELETE_ARRAY(mfxBS.Data);
 
     // Deliver what's available
-    DeliverSurface(false);
+    if (sentFrames == 0 || !m_ProcessedFramesQueue.HasCapacity())
+    {
+        DeliverSurface(false);
+    }
+
     return hr;
 }
 
-HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
+int CQuickSync::DeliverSurface(bool bWaitForCompletion)
 {
     MSDK_VTRACE("QSDcoder: DeliverSurface\n");
 
     TQsQueueItem item;
+    int sentFrames = 0;
 
     // Wait for worker thread to complete a frame (should be used only when flushing)
     if (bWaitForCompletion)
@@ -680,6 +689,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
                     // Send the surface out - return code from dshow filter is ignored.
                     MSDK_VTRACE("QSDcoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
                     m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
+                    ++sentFrames;
                 }
 
                 m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
@@ -688,7 +698,7 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
     }
     else
     {
-        while (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait, use what's ready*/))
+        if (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait, use what's ready*/))
         {
             if (!m_bNeedToFlush)
             {
@@ -696,13 +706,14 @@ HRESULT CQuickSync::DeliverSurface(bool bWaitForCompletion)
                 // Send the surface out - return code from dshow filter is ignored.
                 MSDK_VTRACE("QSDcoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
                 m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
+                ++sentFrames;
             }
 
             m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
         }
     }
 
-    return S_OK;
+    return sentFrames;
 }
 
 void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData::QsFrameStructure& frameStructure)

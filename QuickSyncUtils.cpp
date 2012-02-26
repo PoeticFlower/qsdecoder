@@ -50,7 +50,6 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
         return memcpy(d, s, size);
     }
 
-
     size_t reminder = size & (regsInLoop * sizeof(__m128i) - 1); // Copy 32 bytes every loop
     size_t end = 0;
 
