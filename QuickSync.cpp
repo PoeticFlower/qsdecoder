@@ -112,8 +112,16 @@ CQuickSync::~CQuickSync()
     // Wait for the worker thread to finish
     if (m_ProcessorWorkerThreadId)
     {
-        PostThreadMessage(m_ProcessorWorkerThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(m_hProcessorWorkerThread, INFINITE);
+        if (!m_DecodedFramesQueue.PushBack(NULL, 1000))
+        {
+            MSDK_TRACE("Failed to close worker thread!\n");
+            TerminateThread(m_hProcessorWorkerThread, 0);
+        }
+        else
+        {
+            WaitForSingleObject(m_hProcessorWorkerThread, INFINITE);
+        }
+
         CloseHandle(m_hProcessorWorkerThread);
     }
 
@@ -1042,40 +1050,22 @@ unsigned CQuickSync::ProcessorWorkerThreadProc(void* pThis)
     return static_cast<CQuickSync*>(pThis)->ProcessorWorkerThreadMsgLoop();
 }
 
+
 unsigned CQuickSync::ProcessorWorkerThreadMsgLoop()
 {
 #ifdef _DEBUG
     SetThreadName("*** QS processor WT ***");
 #endif
 
-    BOOL bRet;
-
-    // Note: GetMessage returns zero on WM_QUIT
-    MSG msg;
-    while ((bRet = GetMessage(&msg, (HWND)-1, 0, 0 )) != 0)
+    mfxFrameSurface1* pSurface = NULL;
+    while (m_DecodedFramesQueue.PopFront(pSurface, INFINITE))
     {
-        // Error
-        if (bRet == -1)
+        if (NULL == pSurface)
         {
-            return (unsigned) bRet;
+            break;
         }
-
-        // Ignore WM_NULL messages
-        if (WM_NULL == msg.message)
-            continue;
-
-        if (TM_PROCESS_FRAME == msg.message)
-        {
-            mfxFrameSurface1* pSurface = NULL;
-            m_DecodedFramesQueue.PopFront(pSurface, 0); // A frame must exist
-            HRESULT hr = ProcessDecodedFrame(pSurface);
-            if (FAILED(hr))
-            {
-                // Error
-                bRet = -1;
-                break;
-            }
-        }
+        
+        ProcessDecodedFrame(pSurface);
     }
 
     // All's well
@@ -1096,7 +1086,6 @@ HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
     {
         // Post message to worker thread
         m_DecodedFramesQueue.PushBack(pSurface, INFINITE);
-        PostThreadMessage(m_ProcessorWorkerThreadId, TM_PROCESS_FRAME, 0, 0);
         DeliverSurface(false /* don't wait deliver what's ready */);
     }
     // MT frame processing is disabled
@@ -1301,5 +1290,4 @@ void CQuickSync::OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj)
 
     // Post message to worker thread
     pThis->m_DecodedFramesQueue.PushBack(pSurface, INFINITE);
-    PostThreadMessage(pThis->m_ProcessorWorkerThreadId, TM_PROCESS_FRAME, 0, 0);
 }

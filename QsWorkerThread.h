@@ -45,17 +45,14 @@ public:
 
     // private constructor/destructor used by dynamic creation
     CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFlags,
-        CQsEvent& workStartedEvent, CQsEvent& workFinishedEvent);
+        CQsThreadSafeQueue<IQsTask*>* pTasks);
     ~CQsWorkerThread();
-    void SetState(TState state);
-    TState GetState() { return m_State;  }
 
     DWORD Run();
     void OnProcessBlock();
     __forceinline void* GetBlock();
     unsigned int GetThreadId() { return m_ThreadID; }
     HANDLE GetThreadHandle() { return m_hThread; }
-    void SetTask(IQsTask* pTask);
     
 private:
     void RunTask();
@@ -66,12 +63,8 @@ private:
     unsigned     m_ThreadID;
     HANDLE       m_hThread;
 
-    volatile TState m_State;
-    IQsTask* m_pTask; //current task
-
     // Thread pool resources
     CQsThreadPool* m_pThreadPool;
-    CQsEvent& m_WorkStartedEvent;
-    CQsEvent& m_WorkFinishedEvent;
+    CQsThreadSafeQueue<IQsTask*>* m_pTasks;
 };
 

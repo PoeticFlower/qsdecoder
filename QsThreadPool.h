@@ -59,8 +59,8 @@ private:
     volatile size_t m_nRunningThreadsCount;
     CQsLock m_csLock;
     CQsLock m_csThreadBlockLock;
-    CQsEvent m_WorkStartedEvent;
     CQsEvent m_WorkFinishedEvent;
+    CQsThreadSafeQueue<IQsTask*>* m_pTasks;
 
     static CQsThreadPool* s_Instance;
     static size_t s_nRefCount;
