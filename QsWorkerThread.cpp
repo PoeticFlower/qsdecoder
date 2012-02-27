@@ -42,14 +42,12 @@
 
 // CQsWorkerThread
 CQsWorkerThread::CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFlags,
-    CQsEvent& workStartedEvent, CQsEvent& workFinishedEvent) :
-    m_WorkStartedEvent(workStartedEvent),
-    m_WorkFinishedEvent(workFinishedEvent)
+    CQsThreadSafeQueue<IQsTask*>* pTasks) :
+    m_pTasks(pTasks)
 {
     m_pThreadPool = CQsThreadPool::GetInstance();
     ASSERT(m_pThreadPool != NULL);
 
-    m_State = stReady;
     m_InstanceID = instanceID;
     m_hThread = (HANDLE)_beginthreadex(NULL, 0, &ProcessorWorkerThreadProc, this, dwCreateFlags, &m_ThreadID);
     ::SetThreadPriority(m_hThread, nPriority);
@@ -67,65 +65,36 @@ CQsWorkerThread::~CQsWorkerThread()
     CloseHandle(m_hThread);
 }
 
-void CQsWorkerThread::SetState(TState state)
-{
-    m_State = state;
-}
-
 DWORD CQsWorkerThread::Run()
 {
-    // Signal that thread is initialized
-    m_pThreadPool->OnThreadFinished();
-    
-    bool bStop = false;
-    while (!bStop)
+    IQsTask* pTask;
+    for (;;)
     {
-        m_WorkStartedEvent.Wait(INFINITE);
+        if (!m_pTasks->PopFront(pTask, INFINITE))
+            continue;
 
-        switch (m_State)
+        // We're done
+        if (pTask == NULL)
+            break;
+
+        // Run task
+        size_t taskCount = pTask->TaskCount();
+
+        // No work for this thread - just decrement the active thread count
+        if (m_InstanceID < (int)taskCount)
         {
-        case stRunTask:
-            RunTask();
-            break;
+            pTask->RunTask(m_InstanceID);
+        }   
 
-        case stQuit:
-            bStop = true;
-            break;
+        // Signal that this thread is done with the task
+        m_pThreadPool->OnThreadFinished();
 
-        default:
-            MSDK_TRACE("CQsWorkerThread:\nUnknown event!\n");
-        }
     }
 
     return 0;
 }
 
-void CQsWorkerThread::SetTask(IQsTask* pTask)
-{
-    m_pTask = pTask;
-}
-
 // CQsWorkerThread message handlers
-
-/*******************************************************************
-     Asynchronous run of a block 
- *******************************************************************/
-void CQsWorkerThread::RunTask()
-{
-    if (NULL == m_pTask)
-        return;
-
-    size_t taskCount = m_pTask->TaskCount();
-
-    // No work for this thread - just decrement the active thread count
-    if (m_InstanceID < (int)taskCount)
-    {
-        m_pTask->RunTask(m_InstanceID);
-    }   
-
-    // Signal that this thread is done with the task
-    m_pThreadPool->OnThreadFinished();
-}
 
 unsigned  __stdcall CQsWorkerThread::ProcessorWorkerThreadProc(void* lpParameter)
 {

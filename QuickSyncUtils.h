@@ -116,7 +116,15 @@ public:
 
     bool Wait(DWORD dwMilliseconds = INFINITE)
     {
-        return WAIT_OBJECT_0 == WaitForSingleObject(m_hEvent, dwMilliseconds);
+        DWORD rc = WaitForSingleObject(m_hEvent, dwMilliseconds);
+        if (rc == WAIT_OBJECT_0)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     ~CQsEvent() { if (m_hEvent) { CloseHandle(m_hEvent); } }
@@ -199,6 +207,7 @@ public:
         {
             CQsAutoLock lock(this);
 
+            // Queue is full
             if (m_Size == m_Capacity)
                 return false;
 
@@ -225,24 +234,25 @@ public:
         if (dwMiliSecs > 0 && !WaitForNotEmpty(dwMiliSecs))
             return false; // timeout
 
-        if (m_Size == 0)
-            return false;
         {
-
             CQsAutoLock lock(this);
+
+            ASSERT(m_Size == m_Queue.size());
+            // Queue is empty
+            if (m_Size == 0)
+                return false;
 
             --m_Size;
             res = m_Queue.front();
             m_Queue.pop_front();
 
             // Check new size
-            size_t size = m_Queue.size();
-            if (size == 0)
+            if (m_Size == 0)
             {
                 m_NotEmptyEvent.Lock();
             }
             
-            if (size == m_Capacity - 1)
+            if (m_Size == m_Capacity - 1)
             {
                 m_CapacityEvent.Unlock();
             }
@@ -273,13 +283,13 @@ public:
 
     inline bool WaitForCapacity(DWORD dwMiliSecs)
     {
-        // must not lock!
+        // Must not lock!
         return m_CapacityEvent.Wait(dwMiliSecs);
     }
 
     inline bool WaitForNotEmpty(DWORD dwMiliSecs)
     {
-        // must not lock!
+        // Must not lock!
         return m_NotEmptyEvent.Wait(dwMiliSecs);
     }
 
