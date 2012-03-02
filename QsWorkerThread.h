@@ -34,27 +34,19 @@ class CQsThreadPool;
 class CQsWorkerThread
 {
 public:
-    enum TState
-    {
-        stUninitialized,
-        stQuit,
-        stReady,
-        stRunTask,
-        stAbortTask
-    };
-
-    // private constructor/destructor used by dynamic creation
-    CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFlags,
-        CQsThreadSafeQueue<IQsTask*>* pTasks);
+    CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFlags);
     ~CQsWorkerThread();
 
-    DWORD Run();
-    void OnProcessBlock();
-    __forceinline void* GetBlock();
     unsigned int GetThreadId() { return m_ThreadID; }
-    HANDLE GetThreadHandle() { return m_hThread; }
+    BOOL SetThreadPriority(int nPriority)
+    {
+        return ::SetThreadPriority(m_hThread, nPriority);
+    }
+
+    void StartTask() { m_StartTaskEvent.Unlock(); }
     
 private:
+    DWORD Run();
     void RunTask();
     static unsigned  __stdcall ProcessorWorkerThreadProc(void* lpParameter);
 
@@ -64,7 +56,7 @@ private:
     HANDLE       m_hThread;
 
     // Thread pool resources
+    CQsEvent       m_StartTaskEvent;
     CQsThreadPool* m_pThreadPool;
-    CQsThreadSafeQueue<IQsTask*>* m_pTasks;
 };
 

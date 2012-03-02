@@ -180,50 +180,58 @@ private:
 };
 
 // Thread safe queue template class
-// Assumes a maximum capacity given by the user for
-// the HasCapacity method to make sense.
-template<class T> class CQsThreadSafeQueue : public CQsLock
+// Has a fixed maximum capacity given at construction
+template<class T> class CQsThreadSafeQueue
 {
 public:
     CQsThreadSafeQueue(size_t capacity) :
+      m_Buffer(new T[capacity]),
       m_Capacity(capacity),
       m_Size(0),
-      m_NotEmptyEvent(false),
-      m_CapacityEvent(true)
+      m_Offset(0)
     {
+        InitializeConditionVariable(&m_BufferNotEmpty);
+        InitializeConditionVariable(&m_BufferNotFull);
+        InitializeCriticalSection(&m_csBufferLock);
     }
 
     ~CQsThreadSafeQueue()
     {
-        // Better safe than sorry
-        CQsAutoLock lock(this);
+        EnterCriticalSection(&m_csBufferLock);
+        LeaveCriticalSection(&m_csBufferLock);
+        DeleteCriticalSection(&m_csBufferLock);
     }
 
     inline bool PushBack(const T& item, DWORD dwMiliSecs)
     {
-        if (dwMiliSecs > 0 && !WaitForCapacity(dwMiliSecs))
-            return false; // timeout
+        EnterCriticalSection(&m_csBufferLock);
 
+        while (m_Size == m_Capacity)
         {
-            CQsAutoLock lock(this);
-
-            // Queue is full
-            if (m_Size == m_Capacity)
+            // Buffer is full - sleep so consumers can get items.
+            if (dwMiliSecs == 0 || !SleepConditionVariableCS(&m_BufferNotFull, &m_csBufferLock, dwMiliSecs))
+            {
+                // Release lock
+                LeaveCriticalSection(&m_csBufferLock);
                 return false;
-
-            // Not empty anymore
-            if (m_Size++ == 0)
-            {
-                m_NotEmptyEvent.Unlock();
             }
 
-            m_Queue.push_back(item);
+            ASSERT(m_Size < m_Capacity);
+        }
+       
+        // Insert the item at the end of the queue and increment size.
+        m_Buffer[(m_Offset + m_Size++) % m_Capacity] = item;
 
-            // Out of capacity
-            if (m_Size == m_Capacity)
-            {
-                m_CapacityEvent.Lock();
-            }
+        // See if there's a need to wake consumers up
+        bool bNeedtoWake = (m_Size == 1);
+
+        // Release lock
+        LeaveCriticalSection(&m_csBufferLock);
+
+        // If a consumer is waiting, wake it.
+        if (bNeedtoWake)
+        {
+            WakeConditionVariable(&m_BufferNotEmpty);
         }
 
         return true;
@@ -231,74 +239,76 @@ public:
 
     inline bool PopFront(T& res, DWORD dwMiliSecs)
     {
-        if (dwMiliSecs > 0 && !WaitForNotEmpty(dwMiliSecs))
-            return false; // timeout
+        EnterCriticalSection(&m_csBufferLock);
 
+        while (m_Size == 0)
         {
-            CQsAutoLock lock(this);
-
-            ASSERT(m_Size == m_Queue.size());
-            // Queue is empty
-            if (m_Size == 0)
-                return false;
-
-            --m_Size;
-            res = m_Queue.front();
-            m_Queue.pop_front();
-
-            // Check new size
-            if (m_Size == 0)
+            // Buffer is empty - wait for it to become filled
+            if (dwMiliSecs == 0 || !SleepConditionVariableCS(&m_BufferNotEmpty, &m_csBufferLock, dwMiliSecs))
             {
-                m_NotEmptyEvent.Lock();
+                // Release lock
+                LeaveCriticalSection(&m_csBufferLock);
+                return false; //timeout
             }
-            
-            if (m_Size == m_Capacity - 1)
-            {
-                m_CapacityEvent.Unlock();
-            }
+
+            ASSERT(m_Size > 0);
+        }
+
+        // Pop item
+        res = m_Buffer[m_Offset];
+        --m_Size;
+
+        m_Offset = ++m_Offset % m_Capacity;
+
+        // See if there's a need to wake consumers up
+        bool bNeedToWake = m_Size == m_Capacity - 1;
+
+        // Release lock
+        LeaveCriticalSection(&m_csBufferLock);
+
+        // If a producer is waiting, wake it.
+        if (bNeedToWake)
+        {
+            WakeConditionVariable(&m_BufferNotFull);
         }
 
         return true;
     }
 
-    __forceinline size_t Size()
-    {
-        return m_Size;
-    }
+    __forceinline size_t Size() const { return m_Size; }
 
-    __forceinline size_t GetCapacity()
+    __forceinline size_t GetCapacity() const
     {
         return m_Capacity;
     }
 
-    __forceinline bool HasCapacity()
-    {
-        return m_Size < m_Capacity;
-    }
-    
-    __forceinline bool Empty()
-    {
-        return 0 == m_Size;
-    }
+    __forceinline bool Full() const { return m_Capacity == m_Size; }
+    __forceinline bool Empty() const { return 0 == m_Size; }
 
-    inline bool WaitForCapacity(DWORD dwMiliSecs)
+    inline bool WaitForNotFull(DWORD dwMiliSecs)
     {
-        // Must not lock!
-        return m_CapacityEvent.Wait(dwMiliSecs);
+        EnterCriticalSection(&m_csBufferLock);
+        bool bSuccess = 0 != SleepConditionVariableCS(&m_BufferNotFull, &m_csBufferLock, dwMiliSecs);
+        LeaveCriticalSection(&m_csBufferLock);
+        return bSuccess;
     }
 
     inline bool WaitForNotEmpty(DWORD dwMiliSecs)
     {
-        // Must not lock!
-        return m_NotEmptyEvent.Wait(dwMiliSecs);
+        EnterCriticalSection(&m_csBufferLock);
+        bool bSuccess = 0 != SleepConditionVariableCS(&m_BufferNotEmpty, &m_csBufferLock, dwMiliSecs);
+        LeaveCriticalSection(&m_csBufferLock);
+        return bSuccess;
     }
 
 private:
-    std::deque<T> m_Queue;
-    const size_t m_Capacity;
-    volatile size_t m_Size;
-    CQsEvent m_NotEmptyEvent;
-    CQsEvent m_CapacityEvent;
+    T*                 m_Buffer;           // Array holding the FIFO items
+    const size_t       m_Capacity;         // Max size
+    volatile size_t    m_Size;             // Current size
+    size_t             m_Offset;           // Start of buffer
+    CONDITION_VARIABLE m_BufferNotEmpty;   // Used for waiting till buffer is not empty
+    CONDITION_VARIABLE m_BufferNotFull;    // Used for waiting till buffer is not full
+    CRITICAL_SECTION   m_csBufferLock;     // Critical section used for all locking conditions
 };
 
 // Simple SSE friendly buffer class

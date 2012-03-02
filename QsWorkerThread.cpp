@@ -41,9 +41,8 @@
 #endif // _DEBUG
 
 // CQsWorkerThread
-CQsWorkerThread::CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFlags,
-    CQsThreadSafeQueue<IQsTask*>* pTasks) :
-    m_pTasks(pTasks)
+CQsWorkerThread::CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFlags) :
+    m_StartTaskEvent(false, false)
 {
     m_pThreadPool = CQsThreadPool::GetInstance();
     ASSERT(m_pThreadPool != NULL);
@@ -60,6 +59,8 @@ CQsWorkerThread::CQsWorkerThread(int instanceID, int nPriority, DWORD dwCreateFl
 
 CQsWorkerThread::~CQsWorkerThread()
 {
+    StartTask();
+
     //wait for thread to finish
     WaitForSingleObject(m_hThread, INFINITE);
     CloseHandle(m_hThread);
@@ -67,34 +68,58 @@ CQsWorkerThread::~CQsWorkerThread()
 
 DWORD CQsWorkerThread::Run()
 {
-    IQsTask* pTask;
-    for (;;)
+    // Signal that thread is initialized
+    m_pThreadPool->OnTaskFinished();
+    
+    bool bStop = false;
+    while (!bStop)
     {
-        if (!m_pTasks->PopFront(pTask, INFINITE))
-            continue;
+        m_StartTaskEvent.Wait();
 
-        // We're done
-        if (pTask == NULL)
+        switch (m_pThreadPool->GetState())
+        {
+        case stRunTask:
+            RunTask();
             break;
 
-        // Run task
-        size_t taskCount = pTask->TaskCount();
+        case stQuit:
+            bStop = true;
+            break;
 
-        // No work for this thread - just decrement the active thread count
-        if (m_InstanceID < (int)taskCount)
-        {
-            pTask->RunTask(m_InstanceID);
-        }   
-
-        // Signal that this thread is done with the task
-        m_pThreadPool->OnThreadFinished();
-
+        default:
+            MSDK_TRACE("CQsWorkerThread:\nUnknown event!\n");
+        }
     }
 
     return 0;
 }
 
 // CQsWorkerThread message handlers
+
+/*******************************************************************
+     Asynchronous run of a block 
+ *******************************************************************/
+void CQsWorkerThread::RunTask()
+{
+    IQsTask* pTask = m_pThreadPool->GetTask();
+
+    if (pTask == NULL)
+    {
+        MSDK_TRACE("QsDecoder: invalid thread pool task!\n");
+        return;
+    }
+
+    size_t taskCount = pTask->TaskCount();
+
+    // No work for this thread - just decrement the active thread count
+    if (m_InstanceID < (int)taskCount)
+    {
+        pTask->RunTask(m_InstanceID);
+    }   
+
+    // Signal that this thread is done with the task
+    m_pThreadPool->OnTaskFinished();
+}
 
 unsigned  __stdcall CQsWorkerThread::ProcessorWorkerThreadProc(void* lpParameter)
 {
