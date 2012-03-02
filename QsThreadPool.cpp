@@ -34,24 +34,21 @@
 #include "QsThreadPool.h"
 
 CQsThreadPool* CQsThreadPool::s_Instance = NULL;
-size_t CQsThreadPool::s_nRefCount = 0;
+size_t CQsThreadPool::s_nRefCount        = 0;
 
 CQsThreadPool::CQsThreadPool() :
-    m_WorkFinishedEvent(false)
+    m_WorkFinishedEvent(false, false)
 {
     s_Instance = this;
-    s_nRefCount = 1;
 
     MSDK_ZERO_VAR(m_pThreads);
-    m_nThreadCount = m_nRunningThreadsCount = 2; //GetCoreCount();
-
-    m_pTasks = new CQsThreadSafeQueue<IQsTask*>(m_nThreadCount);
+    m_nThreadCount = m_nRunningThreadsCount = 2;
 
     // Allocate all worker threads
     for (size_t i = 0; i < m_nThreadCount; ++i)
     {
-        //the following line creates a thread with a message map
-        m_pThreads[i] = new CQsWorkerThread((int)i, THREAD_PRIORITY_HIGHEST, 0, m_pTasks);
+        // The following line creates a worker thread
+        m_pThreads[i] = new CQsWorkerThread((int)i, THREAD_PRIORITY_HIGHEST, 0);
 
         if (NULL == m_pThreads[i])
         {
@@ -59,42 +56,29 @@ CQsThreadPool::CQsThreadPool() :
             return;
         }
     }
+
+    // Wait for all threads to initialize
+    m_WorkFinishedEvent.Wait(INFINITE);
+
+    SetState(stRunTask);
 }
 
 CQsThreadPool::~CQsThreadPool()
 {
     CQsAutoLock lock(&m_csLock);
     
-    IQsTask* pTask;
-
-    // Clear tasks
-    while (!m_pTasks->Empty())
-    {
-        m_pTasks->PopFront(pTask, INFINITE);
-    }
-
-    pTask = NULL;
-    for (size_t i = 0; i < m_nThreadCount; ++i)
-    {
-        m_pTasks->PushBack(pTask, 0);
-    }
+    SetState(stQuit);
 
     for (size_t i = 0; i < m_nThreadCount; ++i)
     {
         delete m_pThreads[i];
     }
-
-    delete m_pTasks;
 }
 
 HRESULT CQsThreadPool::Run(IQsTask* pTask)
 {
     CQsThreadPool* p = GetInstance();
-    if (NULL == p)
-    {
-        return E_UNEXPECTED;
-    }
-
+    MSDK_CHECK_POINTER(p, E_UNEXPECTED);
     return p->doRun(pTask);
 }
 
@@ -115,33 +99,30 @@ HRESULT CQsThreadPool::doRun(IQsTask* pTask)
         }
     }
 
-#ifdef CHECK_FOR_DEADLOCKS
-    if (IsBusy())
-    {
-        MSDK_TRACE(__FUNCTION__ " was called on a locked object.\n"
-            "Possible deadlock!\n");
-    }
-#endif
-
     // Dispatch the tasks
     {
         CQsAutoLock lock(&m_csLock);
-        m_WorkFinishedEvent.Lock();
-        m_nRunningThreadsCount = taskCount;
 
-        for (size_t i = 0; i < taskCount; ++i)
+        ASSERT(m_nRunningThreadsCount == 0);
+
+        SetTask(pTask);
+
+        m_nRunningThreadsCount = m_nThreadCount;
+
+        // Signal threads to start working
+        for (size_t i = 0; i < m_nThreadCount; ++i)
         {
-            m_pTasks->PushBack(pTask, INFINITE);
+            m_pThreads[i]->StartTask();
         }
 
-        // Wait for tasks to finish
+        // Wait for all threads to finish
         m_WorkFinishedEvent.Wait(INFINITE);
     }
     
     return S_OK;
 }
 
-void CQsThreadPool::OnThreadFinished()
+void CQsThreadPool::OnTaskFinished()
 {
     // Last worker thread
     if (0 == InterlockedDecrement(&m_nRunningThreadsCount))
@@ -152,7 +133,7 @@ void CQsThreadPool::OnThreadFinished()
 
 HRESULT CQsThreadPool::SetThreadPoolPriority(int nPriority)
 {
-    if (nPriority < THREAD_PRIORITY_IDLE  || nPriority > THREAD_PRIORITY_TIME_CRITICAL)
+    if (nPriority < THREAD_PRIORITY_IDLE || nPriority > THREAD_PRIORITY_TIME_CRITICAL)
         return E_INVALIDARG;
 
     CQsThreadPool* p = CQsThreadPool::GetInstance();
@@ -167,7 +148,7 @@ HRESULT CQsThreadPool::SetThreadPoolPriority(int nPriority)
 
     for (size_t i = 0; i < p->m_nThreadCount; ++i)
     {
-        ::SetThreadPriority(p->m_pThreads[i]->GetThreadHandle(), nPriority);
+        p->m_pThreads[i]->SetThreadPriority(nPriority);
     }
 
     return S_OK;
@@ -185,10 +166,8 @@ void CQsThreadPool::CreateThreadPool()
     {
         new CQsThreadPool();
     }
-    else
-    {
-        ++s_nRefCount;
-    }
+
+    ++s_nRefCount;
 }
 
 void CQsThreadPool::DestroyThreadPool()

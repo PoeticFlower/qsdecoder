@@ -70,7 +70,7 @@
     <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</OutDir>
     <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
-    <IncludePath>MSDK\include;./BaseClasses;$(IncludePath)</IncludePath>
+    <IncludePath>MSDK\include;$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -81,7 +81,7 @@
     <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</OutDir>
     <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
-    <IncludePath>MSDK\include;./BaseClasses;$(IncludePath)</IncludePath>
+    <IncludePath>MSDK\include;$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -92,7 +92,7 @@
     <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\</OutDir>
     <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
-    <IncludePath>MSDK\include;./BaseClasses;$(IncludePath)</IncludePath>
+    <IncludePath>MSDK\include;$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -102,7 +102,7 @@
     <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\</OutDir>
     <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
-    <IncludePath>MSDK\include;./BaseClasses;$(IncludePath)</IncludePath>
+    <IncludePath>MSDK\include;$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>

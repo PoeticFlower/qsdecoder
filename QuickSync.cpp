@@ -546,7 +546,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     }
 
     // Deliver ready surfaces
-    int sentFrames = (m_ProcessedFramesQueue.HasCapacity()) ? 0 : DeliverSurface(false);
+    int sentFrames = (m_ProcessedFramesQueue.Full()) ? DeliverSurface(false) : 0;
 
     MSDK_CHECK_NOT_EQUAL(m_OK, true, E_UNEXPECTED);
     HRESULT hr = S_OK;
@@ -591,7 +591,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             else
             {
                 // Make sure various queues are flushed (avoid deadlock)
-                if (!m_ProcessedFramesQueue.HasCapacity())
+                if (m_ProcessedFramesQueue.Full())
                 {
                     sentFrames += DeliverSurface(false);
                 }
@@ -669,7 +669,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     MSDK_SAFE_DELETE_ARRAY(mfxBS.Data);
 
     // Deliver what's available
-    if (sentFrames == 0 || !m_ProcessedFramesQueue.HasCapacity())
+    if (sentFrames == 0 || m_ProcessedFramesQueue.Full())
     {
         DeliverSurface(false);
     }
@@ -687,7 +687,7 @@ int CQuickSync::DeliverSurface(bool bWaitForCompletion)
     // Wait for worker thread to complete a frame (should be used only when flushing)
     if (bWaitForCompletion)
     {
-        while (m_FreeFramesPool.HasCapacity() || !m_DecodedFramesQueue.Empty())
+        while (!m_FreeFramesPool.Full() || !m_DecodedFramesQueue.Empty())
         {
             if (m_ProcessedFramesQueue.PopFront(item, 10))
             {
@@ -855,7 +855,7 @@ void CQuickSync::FlushOutputQueue()
 
     ASSERT(m_pDecoder->OutputQueueEmpty());
     ASSERT(m_ProcessedFramesQueue.Empty());
-    ASSERT(!m_FreeFramesPool.HasCapacity());
+    ASSERT(m_FreeFramesPool.Full());
 }
 
 void CQuickSync::ClearQueue()
@@ -864,7 +864,7 @@ void CQuickSync::ClearQueue()
     m_bNeedToFlush = true;
 
     // Loop until free frames pool is full
-    while (m_FreeFramesPool.HasCapacity())
+    while (!m_FreeFramesPool.Full())
     {
         if (m_ProcessedFramesQueue.PopFront(item, 10))
         {
@@ -1129,7 +1129,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     MSDK_CHECK_POINTER(pSurface, S_OK); // Decoder queue is empty - return without error
     
     TQsQueueItem item;
-    while (!m_FreeFramesPool.PopFront(item, 2))
+    while (!m_FreeFramesPool.PopFront(item, 10))
     {
 //        static int count = 0;
 //        MSDK_TRACE("** waiting for m_FreeFramesPool %d\n", ++count);
