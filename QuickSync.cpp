@@ -32,7 +32,6 @@
 #include "CodecInfo.h"
 #include "TimeManager.h"
 #include "QuickSyncUtils.h"
-#include "QsThreadPool.h"
 #include "frame_constructors.h"
 #include "QuickSyncDecoder.h"
 #include "QuickSync.h"
@@ -123,12 +122,6 @@ CQuickSync::~CQuickSync()
         }
 
         CloseHandle(m_hProcessorWorkerThread);
-    }
-
-    // Destroy global thread pool
-    if (m_Config.bEnableMtCopy)
-    {
-        CQsThreadPool::DestroyThreadPool();
     }
 
     // Cleanup the free frame pool
@@ -460,13 +453,6 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     {
         m_hProcessorWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &ProcessorWorkerThreadProc, this, 0, &m_ProcessorWorkerThreadId);
         //SetThreadPriority(m_hProcessorWorkerThread, THREAD_PRIORITY_HIGHEST);
-    }
-
-    // Create global thread pool
-    if (m_Config.bEnableMtCopy)
-    {
-        CQsThreadPool::CreateThreadPool();
-        //CQsThreadPool::SetThreadPoolPriority(THREAD_PRIORITY_HIGHEST);
     }
 
     // Fill free frames pool

@@ -30,7 +30,6 @@
 #include "QuickSync_defs.h"
 #include "CodecInfo.h"
 #include "QuickSyncUtils.h"
-#include "QsThreadPool.h"
 
 // gpu_memcpy is a memcpy style function that copied data very fast from a
 // GPU tiled memory (write back)
@@ -346,78 +345,9 @@ bool IsSSE41Enabled()
     return 0 != (CPUInfo[2] & (1<<19)); // 19th bit of 2nd reg means sse4.1 is enabled
 }
 
-size_t GetCoreCount()
-{
-    static size_t s_CoreCount = 0;
+#define MIN_BUFF_SIZE (1 << 18)
 
-    if (0 == s_CoreCount)
-    {
-        DWORD_PTR processAffinityMask;
-        DWORD_PTR systemAffinityMask;
-
-        GetProcessAffinityMask(GetCurrentProcess(),
-            &processAffinityMask,
-            &systemAffinityMask);
-
-        int coreCount = 0;
-        DWORD_PTR tempMask = 1;
-        for (size_t i = 0; i < sizeof(processAffinityMask) * 8; ++i)
-        {
-            if (processAffinityMask & tempMask)
-                ++coreCount;
-            tempMask <<= 1;
-        }
-
-        s_CoreCount = max(1, coreCount);
-    }
-
-    return s_CoreCount;    
-}
-
-#define MIN_BUFF_SIZE (1<<16)
-
-class CQsMtCopy : public IQsTask
-{
-public:
-    CQsMtCopy(void* d, const void* s, size_t size, size_t taskCount, Tmemcpy func = &memcpy) : m_Dest(d), m_Src(s), m_Func(func), m_nTaskCount(taskCount)
-    {
-        MSDK_ZERO_VAR(m_Offsets);
-        size_t blockSize = size / taskCount;
-        blockSize &= ~15; // Make size a multiple of 16 bytes
-
-        size_t offset = 0;
-        for (size_t i = 0; i < taskCount; ++i)
-        {
-            m_Offsets[i] = offset;
-            offset += blockSize;
-        }
-        m_Offsets[taskCount] = size;
-    }
-
-    virtual HRESULT RunTask(size_t taskId)
-    {
-        ASSERT(m_Func != NULL);
-        const char* s = (const char*)m_Src  + m_Offsets[taskId];
-        char* d = (char*)m_Dest + m_Offsets[taskId];
-        size_t size = m_Offsets[taskId + 1] - m_Offsets[taskId];
-        m_Func(d, s, size);
-        return S_OK;
-    }
-
-    virtual size_t TaskCount()
-    {
-        return m_nTaskCount;
-    }
-
-private:
-    void* m_Dest;
-    const void* m_Src;
-    Tmemcpy m_Func;
-    size_t m_Offsets[QS_MAX_CPU_CORES + 1];
-    size_t m_nTaskCount;
-};
-
-void* mt_memcpy(void* d, const void* s, size_t size)
+static void* mt_copy(void* d, const void* s, size_t size, Tmemcpy memcpyFunc)
 {
     MSDK_CHECK_POINTER(d, NULL);
     MSDK_CHECK_POINTER(s, NULL);
@@ -425,26 +355,27 @@ void* mt_memcpy(void* d, const void* s, size_t size)
     // Buffer is very small and not worth the effort
     if (size < MIN_BUFF_SIZE)
     {
-        return memcpy(d, s, size);
+        return memcpyFunc(d, s, size);
     }
 
-    CQsMtCopy task(d, s, size, 2, memcpy);
-    CQsThreadPool::Run(&task);
+    size_t blockSize = (size / 2) & ~0xf; // Make size a multiple of 16 bytes
+    std::array<size_t, 3> offsets = { 0, blockSize, size };
+    std::array<size_t, 2> indexes = { 0, 1 };
+
+    Concurrency::parallel_for_each(indexes.begin(), indexes.end(), [d, s, offsets, memcpyFunc](size_t& i)
+    {
+        memcpyFunc((char*)d + offsets[i], (const char*)s + offsets[i], offsets[i + 1] - offsets[i]);
+    });
+
     return d;
+}
+
+void* mt_memcpy(void* d, const void* s, size_t size)
+{
+    return mt_copy(d, s, size, memcpy);
 }
 
 void* mt_gpu_memcpy(void* d, const void* s, size_t size)
 {
-    MSDK_CHECK_POINTER(d, NULL);
-    MSDK_CHECK_POINTER(s, NULL);
-
-    // Buffer is very small and not worth the effort
-    if (size < MIN_BUFF_SIZE)
-    {
-        return gpu_memcpy(d, s, size);
-    }
-
-    CQsMtCopy task(d, s, size, 2, gpu_memcpy);
-    CQsThreadPool::Run(&task);
-    return d;
+    return mt_copy(d, s, size, gpu_memcpy);
 }

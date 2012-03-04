@@ -27,6 +27,10 @@
 #include <deque>
 #include <set>
 #include <algorithm>
+#include <array>
+
+// PPL
+#include <ppl.h>
 
 // use our own ASSERT macro
 #undef ASSERT

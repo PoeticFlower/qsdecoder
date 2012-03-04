@@ -28,9 +28,6 @@
 
 #pragma once
 
-// Forward declarations
-class CQsWorkerThread;
-
 // SSE4.1 based memcpy that copies from video memory to system memory
 void* gpu_memcpy(void* d, const void* s, size_t _size);
 void* mt_memcpy(void* d, const void* s, size_t size);
@@ -48,7 +45,6 @@ const char* GetCodecName(DWORD codec);
 const char* GetProfileName(DWORD codec, DWORD profile);
 
 bool IsSSE41Enabled();
-size_t GetCoreCount();
 
 // Set current thread name in VS debugger
 void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID = -1 /* current thread */);
