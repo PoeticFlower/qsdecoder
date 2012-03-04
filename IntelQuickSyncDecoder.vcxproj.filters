@@ -68,12 +68,6 @@
     <ClInclude Include="QuickSyncUtils.h">
       <Filter>Header Files\Utility</Filter>
     </ClInclude>
-    <ClInclude Include="QsWorkerThread.h">
-      <Filter>Header Files\Utility</Filter>
-    </ClInclude>
-    <ClInclude Include="QsThreadPool.h">
-      <Filter>Header Files\Utility</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -105,12 +99,6 @@
     </ClCompile>
     <ClCompile Include="base_alllocator.cpp">
       <Filter>Source Files\Allocators</Filter>
-    </ClCompile>
-    <ClCompile Include="QsThreadPool.cpp">
-      <Filter>Source Files\Utility</Filter>
-    </ClCompile>
-    <ClCompile Include="QsWorkerThread.cpp">
-      <Filter>Source Files\Utility</Filter>
     </ClCompile>
     <ClCompile Include="QuickSyncUtils.cpp">
       <Filter>Source Files\Utility</Filter>
