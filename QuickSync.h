@@ -62,7 +62,7 @@ protected:
     virtual HRESULT BeginFlush()
     {
         // Don't use a lock - causes deadlocks!
-        MSDK_TRACE("QSDcoder: BeginFlush\n");
+        MSDK_TRACE("QsDecoder: BeginFlush\n");
         m_bFlushing = true; 
         m_bNeedToFlush = true; // Need to flush buffers (reset) in the future (within the decoding thread!).
                                // Set to false during OnSeek or Flush.
@@ -74,7 +74,7 @@ protected:
     virtual HRESULT EndFlush()
     {
         // Don't use a lock - causes deadlocks!
-        MSDK_TRACE("QSDcoder: EndFlush\n");
+        MSDK_TRACE("QsDecoder: EndFlush\n");
         m_bFlushing = false;
         return S_OK;
     }

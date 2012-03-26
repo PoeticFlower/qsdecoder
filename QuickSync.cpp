@@ -66,7 +66,7 @@ CQuickSync::CQuickSync() :
     m_ProcessedFramesQueue(PROCESS_QUEUE_LENGTH),
     m_FreeFramesPool(PROCESS_QUEUE_LENGTH)
 {
-    MSDK_TRACE("QSDcoder: Constructor\n");
+    MSDK_TRACE("QsDecoder: Constructor\n");
 
     mfxStatus sts = MFX_ERR_NONE;
     m_pDecoder = new CQuickSyncDecoder(sts);
@@ -91,7 +91,7 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableMtDecode       = m_Config.bEnableMultithreading;
     m_Config.bEnableMtCopy         = m_Config.bEnableMultithreading;
 
-//    m_Config.bEnableSwEmulation  = true;
+    //m_Config.bEnableSwEmulation  = true;
 
     // Currently not working well - menu decoding :(
     //m_Config.bEnableDvdDecoding = true;
@@ -101,7 +101,7 @@ CQuickSync::CQuickSync() :
 
 CQuickSync::~CQuickSync()
 {
-    MSDK_TRACE("QSDcoder: Destructor\n");
+    MSDK_TRACE("QsDecoder: Destructor\n");
     
     // This will quicken the exit 
     BeginFlush();
@@ -205,19 +205,19 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
         HRESULT hr = CheckCodecProfileSupport(mfx.CodecId, mp2->dwProfile, mp2->dwLevel);
         if (hr != S_OK)
         {
-            MSDK_TRACE("QSDcoder::InitDecoder - failed due to unsupported codec (%s), profile (%s), level (%i) combination\n",
+            MSDK_TRACE("QsDecoder::InitDecoder - failed due to unsupported codec (%s), profile (%s), level (%i) combination\n",
                 GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
             return E_NOTIMPL;
         }
         else
         {
-            MSDK_TRACE("QSDcoder::InitDecoder - codec (%s), profile (%s), level (%i)\n",
+            MSDK_TRACE("QsDecoder::InitDecoder - codec (%s), profile (%s), level (%i)\n",
                 GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
         }
     }
     else
     {
-        MSDK_TRACE("QSDcoder::InitDecoder - codec (%s)\n", GetCodecName(mfx.CodecId));
+        MSDK_TRACE("QsDecoder::InitDecoder - codec (%s)\n", GetCodecName(mfx.CodecId));
     }
 
     return S_OK;
@@ -225,10 +225,10 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
 
 HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 {
-    MSDK_TRACE("QSDcoder: TestMediaType\n");
+    MSDK_TRACE("QsDecoder: TestMediaType\n");
     if (!m_OK)
     {
-        MSDK_TRACE("QSDcoder: TestMediaType was called on an invalid object!\n");
+        MSDK_TRACE("QsDecoder: TestMediaType was called on an invalid object!\n");
         return E_FAIL;
     }
     
@@ -239,12 +239,12 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     // Disable DVD playback until it's OK
     if (MEDIATYPE_DVD_ENCRYPTED_PACK == mtIn->majortype)
     {
-        MSDK_TRACE("QSDcoder: DVD decoding is not supported!\n");
+        MSDK_TRACE("QsDecoder: DVD decoding is not supported!\n");
         return E_FAIL;
     }
     else if (mtIn->majortype != MEDIATYPE_Video)
     {
-        MSDK_TRACE("QSDcoder: Invalid majortype GUID!\n");
+        MSDK_TRACE("QsDecoder: Invalid majortype GUID!\n");
         return E_FAIL;
     }
     
@@ -263,13 +263,13 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         mfxStatus sts = m_pDecoder->CheckHwAcceleration(&videoParams);
         if (sts != MFX_ERR_NONE)
         {
-            MSDK_TRACE("HW accelration is not supported. Aborting");
+            MSDK_TRACE("HW accelration is not supported. Aborting!\n");
             hr = E_FAIL;
         }
     }
 
     delete[] (mfxU8*)vih2;
-    MSDK_TRACE("QSDcoder: TestMediaType finished: %s\n", (SUCCEEDED(hr)) ? "success" : "failure");
+    MSDK_TRACE("QsDecoder: TestMediaType finished: %s\n", (SUCCEEDED(hr)) ? "success" : "failure");
     return hr;
 }
 
@@ -400,7 +400,7 @@ HRESULT CQuickSync::DecodeHeader(
 
 HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 {
-    MSDK_TRACE("QSDcoder: InitDecoder\n");
+    MSDK_TRACE("QsDecoder: InitDecoder\n");
     CQsAutoLock cObjectLock(&m_csLock);
     m_bNeedToFlush = true;
     m_bInitialized = true;
@@ -522,7 +522,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     
     CQsAutoLock cObjectLock(&m_csLock);
 
-    MSDK_VTRACE("QSDcoder: Decode\n");
+    MSDK_VTRACE("QsDecoder: Decode\n");
 
     // We haven't flushed since the last BeginFlush call - probably a DVD playback scenario
     // where NewSegment/OnSeek isn't issued.
@@ -591,7 +591,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
         }
         else if (MFX_WRN_VIDEO_PARAM_CHANGED == sts)
         {
-            MSDK_TRACE("QSDcoder: Decode MFX_WRN_VIDEO_PARAM_CHANGED\n");
+            MSDK_TRACE("QsDecoder: Decode MFX_WRN_VIDEO_PARAM_CHANGED\n");
 
             // Need to handle a possible change in the stream parameters
             if (!flushed)
@@ -610,13 +610,13 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
         }
         else if (MFX_ERR_NOT_ENOUGH_BUFFER == sts)
         {
-            MSDK_TRACE("QSDcoder: Error - ran out of work buffers!\n");
+            MSDK_TRACE("QsDecoder: Error - ran out of work buffers!\n");
             // This is a system malfunction!
             break;
         }
         else if (MFX_ERR_INCOMPATIBLE_VIDEO_PARAM == sts)
         {
-            MSDK_TRACE("QSDcoder: Decode MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
+            MSDK_TRACE("QsDecoder: Decode MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
 
             // Flush existing frames
             Flush(true);
@@ -641,7 +641,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
                 continue;
             }
 
-            MSDK_TRACE("QSDcoder: Decode didn't recover from MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
+            MSDK_TRACE("QsDecoder: Decode didn't recover from MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
         }
 
         // The decoder has returned with an error
@@ -665,7 +665,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
 
 int CQuickSync::DeliverSurface(bool bWaitForCompletion)
 {
-    MSDK_VTRACE("QSDcoder: DeliverSurface\n");
+    MSDK_VTRACE("QsDecoder: DeliverSurface\n");
 
     TQsQueueItem item;
     int sentFrames = 0;
@@ -681,7 +681,7 @@ int CQuickSync::DeliverSurface(bool bWaitForCompletion)
                 {
                     QsFrameData* pFrameData = item.first;
                     // Send the surface out - return code from dshow filter is ignored.
-                    MSDK_VTRACE("QSDcoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
+                    MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
                     m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
                     ++sentFrames;
                 }
@@ -698,7 +698,7 @@ int CQuickSync::DeliverSurface(bool bWaitForCompletion)
             {
                 QsFrameData* pFrameData = item.first;
                 // Send the surface out - return code from dshow filter is ignored.
-                MSDK_VTRACE("QSDcoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
+                MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
                 m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
                 ++sentFrames;
             }
@@ -772,7 +772,7 @@ mfxStatus CQuickSync::ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN
 
 HRESULT CQuickSync::Flush(bool deliverFrames)
 {
-    MSDK_TRACE("QSDcoder: Flush\n");
+    MSDK_TRACE("QsDecoder: Flush\n");
 
     CQsAutoLock cObjectLock(&m_csLock);
 
@@ -808,7 +808,7 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     // All data has been flushed
     m_bNeedToFlush = false;
 
-    MSDK_TRACE("QSDcoder: Flush ended\n");
+    MSDK_TRACE("QsDecoder: Flush ended\n");
     return hr;
 }
 
@@ -826,7 +826,7 @@ void CQuickSync::FlushOutputQueue()
 
     DeliverSurface(true);
 
-    MSDK_TRACE("QSDcoder: FlushOutputQueue (deliverFrames=%s)\n", (!m_bNeedToFlush) ? "TRUE" : "FALSE");
+    MSDK_TRACE("QsDecoder: FlushOutputQueue (deliverFrames=%s)\n", (!m_bNeedToFlush) ? "TRUE" : "FALSE");
     for (size_t i = m_pDecoder->OutputQueueSize(); i > 0; --i)
     {
         QueueSurface(NULL, false);
@@ -861,7 +861,7 @@ void CQuickSync::ClearQueue()
 
 HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
 {
-    MSDK_TRACE("QSDcoder: OnSeek\n");
+    MSDK_TRACE("QsDecoder: OnSeek\n");
 
     CQsAutoLock cObjectLock(&m_csLock);
 
@@ -878,7 +878,7 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
         sts = m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
         if (sts != MFX_ERR_NONE)
         {
-            MSDK_TRACE("QSDcoder: reset failed!\n");
+            MSDK_TRACE("QsDecoder: reset failed!\n");
             return E_FAIL;
         }
         
@@ -887,7 +887,7 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
     }
 
     m_bNeedToFlush = false;
-    MSDK_TRACE("QSDcoder: OnSeek complete\n");
+    MSDK_TRACE("QsDecoder: OnSeek complete\n");
     return (sts == MFX_ERR_NONE) ? S_OK : E_FAIL;
 }
 
@@ -1087,7 +1087,7 @@ HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
 // This function works on a worker thread
 HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 {
-    MSDK_VTRACE("QSDcoder: ProcessDecodedFrame\n");
+    MSDK_VTRACE("QsDecoder: ProcessDecodedFrame\n");
 
     // Got a new surface. A NULL surface means to get a surface from the output queue
     if (pSurface != NULL)
@@ -1256,7 +1256,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
         m_FreeFramesPool.PushBack(item, 0);
     }
 
-    MSDK_VTRACE("QSDcoder: ProcessDecodedFrame completed\n");
+    MSDK_VTRACE("QsDecoder: ProcessDecodedFrame completed\n");
     return S_OK;
 }
 
