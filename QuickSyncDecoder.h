@@ -184,7 +184,6 @@ protected:
     mfxIMPL          m_mfxImpl;
     CQsConfig        m_Config;
     bool             m_bHwAcceleration;
-    bool             m_bHwAccelInit;
 
     // Decoder
     MFXVideoDECODE* m_pmfxDEC;
@@ -195,7 +194,6 @@ protected:
     mfxFrameSurface1*     m_pFrameSurfaces;
     mfxFrameAllocResponse m_AllocResponse;
     mfxU16                m_nRequiredFramesNum;
-    int                   m_nLastSurfaceId;
     bool                  m_bUseD3DAlloc;
     mfxU16                m_nAuxFrameCount;
 
@@ -203,6 +201,7 @@ protected:
     IDirect3DDeviceManager9* m_pRendererD3dDeviceManager;
     IDirect3DDeviceManager9* m_pD3dDeviceManager; 
     IDirect3DDevice9*        m_pD3dDevice;
+    UINT                     m_ResetToken;
 
     // Async decoder
     HANDLE              m_hDecoderWorkerThread;
