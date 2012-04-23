@@ -362,7 +362,7 @@ bool CDecTimeManager::CalcCurrentFrameRate(double& frameRate, size_t nQueuedFram
             frameRate = floor(frameRate + 0.5);
         }
 
-        return true;
+        return frameRate <= MAX_FRAME_RATE;
     }
 
     return false;
