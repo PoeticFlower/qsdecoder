@@ -202,7 +202,7 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
     if (FORMAT_MPEG2_VIDEO == guidFormat)
     {
         MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(mtIn->pbFormat);
-        HRESULT hr = CheckCodecProfileSupport(mfx.CodecId, mp2->dwProfile, mp2->dwLevel);
+        HRESULT hr = CheckCodecProfileSupport(mfx.CodecId, mp2->dwProfile);
         if (hr != S_OK)
         {
             MSDK_TRACE("QsDecoder::InitDecoder - failed due to unsupported codec (%s), profile (%s), level (%i) combination\n",
@@ -416,7 +416,6 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     if (!(mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK || mtIn->majortype == MEDIATYPE_Video))
         return VFW_E_INVALIDMEDIATYPE;
-
 
     hr = DecodeHeader(mtIn, fourCC, m_pFrameConstructor, vih2, nSampleSize, nVideoInfoSize, m_mfxParamsVideo);
 
@@ -956,7 +955,7 @@ mfxFrameSurface1* CQuickSync::PopSurface()
     return m_pDecoder->PopSurface();
 }
 
-HRESULT CQuickSync::CheckCodecProfileSupport(DWORD codec, DWORD profile, DWORD level)
+HRESULT CQuickSync::CheckCodecProfileSupport(DWORD codec, DWORD profile)
 {
     // H264
     if (codec == MFX_CODEC_AVC)

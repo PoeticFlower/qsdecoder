@@ -29,9 +29,10 @@
 #pragma once
 
 #define MFX_TIME_STAMP_FREQUENCY 90000L
-#define MFX_TIME_STAMP_INVALID  (mfxU64)(-1)
-#define MFX_TIME_STAMP_MAX      ((mfxI64)100000 * (mfxI64)MFX_TIME_STAMP_FREQUENCY)
-#define INVALID_REFTIME _I64_MIN
+#define MFX_TIME_STAMP_INVALID   (mfxU64)(-1)
+#define MFX_TIME_STAMP_MAX       ((mfxI64)100000 * (mfxI64)MFX_TIME_STAMP_FREQUENCY)
+#define INVALID_REFTIME          _I64_MIN
+#define MAX_FRAME_RATE           125
 
 struct TTimeStampInfo
 {
@@ -61,7 +62,7 @@ public:
     {
         m_bIsSampleInFields = bIsFields;
         // Check for invalid values
-        if (frameRate < 1 || frameRate > 125)
+        if (frameRate < 1 || frameRate > MAX_FRAME_RATE)
         {
             m_dFrameRate = 0;
         }

@@ -53,7 +53,7 @@ protected:
         size_t nSampleSize,
         size_t& nVideoInfoSize,
         mfxVideoParam& videoParams);
-    virtual HRESULT CheckCodecProfileSupport(DWORD codec, DWORD profile, DWORD level);
+    virtual HRESULT CheckCodecProfileSupport(DWORD codec, DWORD profile);
 
     // Marks the beginning of a flush (discard frames or reset).
     // Any samples recieved during the flush period are discarded internally.
