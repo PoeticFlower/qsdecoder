@@ -474,8 +474,8 @@ bool CVC1FrameConstructor::StartCodeExist(mfxU8* pStart)
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 CAVCFrameConstructor::CAVCFrameConstructor()
 {
-    m_HeaderNalSize  = 2;  //MSDN - MPEG2VideoInfo->dwSequenceHeader delimited by 2 byte length fields
-    m_NalSize = 4;
+    m_HeaderNalSize = 2;  //MSDN - MPEG2VideoInfo->dwSequenceHeader delimited by 2 byte length fields
+    m_NalSize = 0;
     SetValue(0x01000000, m_H264StartCode);
     m_TempBuffer.reserve(1<<20);
 }
@@ -504,7 +504,7 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
     // SPS and/or PPS Data will be present
     mfxStatus sts = MFX_ERR_NONE; 
     mfxU32 nNalDataLen;          
-    mfxU8* pNalDataBuff; 
+    const mfxU8* pNalDataBuff; 
     CH264Nalu itStartCode;
     MSDK_ZERO_VAR(m_Headers);
     m_TempBuffer.clear();
@@ -547,7 +547,7 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     mfxU8* pDataBuffer = NULL;    
     CH264Nalu itStartCode;
     int nNalDataLen; 
-    mfxU8* pNalDataBuff; 
+    const mfxU8* pNalDataBuff; 
     m_TempBuffer.clear();
     MSDK_CHECK_POINTER(pSample, MFX_ERR_NULL_PTR); 
     MSDK_CHECK_POINTER(pBS, MFX_ERR_NULL_PTR); 

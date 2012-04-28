@@ -1116,9 +1116,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     TQsQueueItem item;
     while (!m_FreeFramesPool.PopFront(item, 10))
     {
-//        static int count = 0;
-//        MSDK_TRACE("** waiting for m_FreeFramesPool %d\n", ++count);
-
         // A flush event has just occurred - abort frame processing
         if (m_bNeedToFlush)
         {
@@ -1139,14 +1136,22 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
 
     if (pSurface->Data.Corrupted)
     {
-        // Do something with a corrupted surface?
         outFrameData.bCorrupted = true;
         MSDK_TRACE("QsDecoder: warning received a corrupted frame\n");
+
+        // Discard corrupted frames at the start of a sequence
+        // Speeds up seeking 
+        if (0 == m_nSegmentFrameCount)
+        {
+            m_FreeFramesPool.PushBack(item, 0);
+            m_pDecoder->UnlockSurface(pSurface);
+            return S_OK;
+        }
     }
 
     ++m_nSegmentFrameCount;
      
-    // Result is in m_FrameData
+    // Result is in outFrameData
     // False return value means that the frame has a negative time stamp and should not be displayed.
     if (!SetTimeStamp(pSurface, outFrameData))
     {
