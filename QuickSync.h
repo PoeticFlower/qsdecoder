@@ -53,7 +53,10 @@ protected:
         size_t nSampleSize,
         size_t& nVideoInfoSize,
         mfxVideoParam& videoParams);
-    virtual HRESULT CheckCodecProfileSupport(DWORD codec, DWORD profile);
+
+    // Workaround function to tell if a codec/profile is supported. After driver version 15.26.xx.2712
+    // this is redundent and should be removed.
+    HRESULT CheckCodecProfileSupport(DWORD codec, DWORD profile);
 
     // Marks the beginning of a flush (discard frames or reset).
     // Any samples recieved during the flush period are discarded internally.
@@ -107,32 +110,32 @@ protected:
     void FlushOutputQueue();
     unsigned ProcessorWorkerThreadMsgLoop();
 
-    // statics
+    // Static methods
     static void OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj);
     static unsigned  __stdcall ProcessorWorkerThreadProc(void* pThis);
 
-    // data members
+    // Data members
     bool m_OK;
-    bool m_bInitialized;
-    void* m_ObjParent;
-    TQS_DeliverSurfaceCallback m_DeliverSurfaceCallback;
-    CQsLock             m_csLock;
-    CQuickSyncDecoder*  m_pDecoder;
-    mfxVideoParam       m_mfxParamsVideo;      // video params
-    mfxU32              m_nPitch;
-    CDecTimeManager     m_TimeManager;
-    CFrameConstructor*  m_pFrameConstructor;
-    size_t              m_nSegmentFrameCount; // used for debugging mostly
-    volatile bool       m_bFlushing;          // like in DirectShow - current frame and data should be discarded
-    volatile bool       m_bNeedToFlush;       // a flush was seen but not handled yet
-    bool                m_bDvdDecoding;       // support DVD decoding
-    CQsConfig           m_Config;
-    HANDLE              m_hProcessorWorkerThread;
+    bool m_bInitialized; // Becomes true after calling InitDecoder. Afterwards SetConfig will silently fail.
+    void* m_ObjParent;   // Pointer to object that receives frames.
+    TQS_DeliverSurfaceCallback m_DeliverSurfaceCallback; // Callback for receiving frames
+    CQsLock             m_csLock;                  // Object lock
+    CQuickSyncDecoder*  m_pDecoder;                // Low level decoder
+    mfxVideoParam       m_mfxParamsVideo;          // MSDK video parameters
+    mfxU32              m_nPitch;                  // Frame pitch, used for resetting the decoder
+    CDecTimeManager     m_TimeManager;             // Manages time stamps
+    CFrameConstructor*  m_pFrameConstructor;       // A stream converter - may modify stream to make HW decoder happy
+    size_t              m_nSegmentFrameCount;      // Frame count since the start of the sequence
+    volatile bool       m_bFlushing;               // Like in DirectShow - current frame and data should be discarded
+    volatile bool       m_bNeedToFlush;            // A flush was seen but not handled yet
+    bool                m_bDvdDecoding;            // Current media is DVD
+    CQsConfig           m_Config;                  // Global config
+    HANDLE              m_hProcessorWorkerThread;   
     unsigned            m_ProcessorWorkerThreadId;
 
     typedef std::pair<QsFrameData*, CQsAlignedBuffer*> TQsQueueItem;
 
     CQsThreadSafeQueue<mfxFrameSurface1*> m_DecodedFramesQueue;
-    CQsThreadSafeQueue<TQsQueueItem> m_ProcessedFramesQueue; // holds frame buffers after processing
-    CQsThreadSafeQueue<TQsQueueItem> m_FreeFramesPool;       // holds free frame buffers
+    CQsThreadSafeQueue<TQsQueueItem> m_ProcessedFramesQueue; // Holds frame buffers after processing
+    CQsThreadSafeQueue<TQsQueueItem> m_FreeFramesPool;       // Holds free frame buffers
 };
