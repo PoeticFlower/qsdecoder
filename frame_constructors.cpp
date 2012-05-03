@@ -503,7 +503,7 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
 
     // SPS and/or PPS Data will be present
     mfxStatus sts = MFX_ERR_NONE; 
-    mfxU32 nNalDataLen;          
+    size_t nNalDataLen;          
     const mfxU8* pNalDataBuff; 
     CH264Nalu itStartCode;
     MSDK_ZERO_VAR(m_Headers);
@@ -546,7 +546,7 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     mfxU32 nDataSize = 0; 
     mfxU8* pDataBuffer = NULL;    
     CH264Nalu itStartCode;
-    int nNalDataLen; 
+    size_t nNalDataLen; 
     const mfxU8* pNalDataBuff; 
     m_TempBuffer.clear();
     MSDK_CHECK_POINTER(pSample, MFX_ERR_NULL_PTR); 

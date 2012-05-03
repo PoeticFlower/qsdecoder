@@ -85,8 +85,8 @@ public:
 private:
     // Lock and Unlock are private and can only be called from
     // the CQsAutoLock/CQsAutoUnlock classes
-    __forceinline void Lock()   { EnterCriticalSection(&m_CritSec); }
-    __forceinline void Unlock() { LeaveCriticalSection(&m_CritSec); }
+    __forceinline void Lock()   { ASSERT(this != NULL); EnterCriticalSection(&m_CritSec); }
+    __forceinline void Unlock() { ASSERT(this != NULL); LeaveCriticalSection(&m_CritSec); }
 
     // Make copy constructor and assignment operator inaccessible
     DISALLOW_COPY_AND_ASSIGN(CQsLock)

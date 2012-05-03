@@ -103,8 +103,7 @@ public:
     void AddOutputTimeStamp(mfxFrameSurface1* pSurface);
     bool CalcPtsOrder(const TFrameVector& frames);
     bool GetSampleTimeStamp(const TFrameVector& frames,
-                            REFERENCE_TIME& rtStart,
-                            REFERENCE_TIME& rtStop);
+                            REFERENCE_TIME& rtStart);
     bool IsSampleInFields() { return m_bIsSampleInFields; }
     void OnVideoParamsChanged(double frameRate);
 

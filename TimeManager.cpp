@@ -94,18 +94,17 @@ void CDecTimeManager::SetInverseTelecine(bool bIvtc)
     if (m_bIvtc)
     {
         FixFrameRate(fps23976);
-        MSDK_TRACE("QsDecoder: entering IVTC\n", (float)(m_dFrameRate));
+        MSDK_TRACE("QsDecoder: entering IVTC\n");
     }
     else
     {
         FixFrameRate(fps2997);
-        MSDK_TRACE("QsDecoder: leaving IVTC\n", (float)(m_dFrameRate));
+        MSDK_TRACE("QsDecoder: leaving IVTC\n");
     }
 }
 
 bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
-                                         REFERENCE_TIME& rtStart,
-                                         REFERENCE_TIME& rtStop)
+                                         REFERENCE_TIME& rtStart)
 {
     if (frames.empty())
         return false;
@@ -125,7 +124,6 @@ bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
 
     bool bFieldDoubling = (0 != (pSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_REPEATED));
     const REFERENCE_TIME rtDecoder = GetSampleRefTime(pSurface);
-    rtStop = INVALID_REFTIME;
 
     ++m_nLastSeenFieldDoubling;
 
@@ -146,7 +144,6 @@ bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
     // Can't start the sequence - drop frame
     if (rtDecoder == INVALID_REFTIME && m_rtPrevStart == INVALID_REFTIME)
     {
-        rtStart = rtStop = INVALID_REFTIME;
         return false;
     }
 
@@ -250,7 +247,6 @@ bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
         }
     }   
 
-    rtStop = rtStart + 1;
     m_rtPrevStart = rtStart;
     return true;
 }

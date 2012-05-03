@@ -32,6 +32,7 @@
 #include "QuickSyncUtils.h"
 #include "TimeManager.h"
 #include "QuickSyncDecoder.h"
+#include "QuickSyncVPP.h"
 #include "QuickSync.h"
 
 #ifdef __INTEL_COMPILER
@@ -97,7 +98,7 @@ DWORD __stdcall check()
     {
         caps = QS_CAP_HW_ACCELERATION;
 
-        // test SW emulation
+        // Test SW emulation
         pSession->Close();
         sts = pSession->Init(MFX_IMPL_SOFTWARE, &apiVersion);
         if (MFX_ERR_NONE == sts)
@@ -105,6 +106,10 @@ DWORD __stdcall check()
             caps |= QS_CAP_SW_EMULATION;
         }
     }
+
+    caps |= QS_CAP_DEINTERLACING;
+    caps |= QS_CAP_DETAIL;
+    caps |= QS_CAP_DENOISE;
 
     delete pSession;
     return caps;

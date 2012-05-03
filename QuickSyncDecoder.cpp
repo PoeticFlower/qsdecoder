@@ -243,7 +243,6 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     if (m_Config.bEnableMtDecode && m_hDecoderWorkerThread == NULL)
     {
         m_hDecoderWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &DecoderWorkerThreadProc, this, 0, &m_DecoderWorkerThreadId);
-//        SetThreadPriority(m_hDecoderWorkerThread, THREAD_PRIORITY_HIGHEST);
     }
 
     if (NULL == m_pFrameAllocator)
@@ -365,7 +364,6 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
     mfxSyncPoint syncp;
     mfxFrameSurface1* pWorkSurface = FindFreeSurface();
     MSDK_CHECK_POINTER(pWorkSurface, MFX_ERR_NOT_ENOUGH_BUFFER);
-    int tries = 0;
     do
     {
         sts = m_pmfxDEC->DecodeFrameAsync(pBS, pWorkSurface, &pFrameSurface, &syncp);
@@ -378,12 +376,6 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
         else if (MFX_WRN_DEVICE_BUSY == sts)
         {
             MSDK_TRACE("QsDecoder: MFX_WRN_DEVICE_BUSY\n");
-            if (m_bUseD3DAlloc && tries++ == 50)
-            {
-                MSDK_TRACE("QsDecoder: Resetting device due to multiple MFX_WRN_DEVICE_BUSY warnings\n");
-                InternalReset(m_pVideoParams, m_pVideoParams->mfx.FrameInfo.Width, true);
-            }
-
             Sleep(1);
         }
     } while (MFX_WRN_DEVICE_BUSY == sts || MFX_ERR_MORE_SURFACE == sts);
@@ -547,7 +539,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
     // Setup allocator - HW acceleration
     if (m_bUseD3DAlloc)
     {
-        m_pVideoParams->IOPattern = MFX_IOPATTERN_OUT_VIDEO_MEMORY;
+        m_pVideoParams->IOPattern = MFX_IOPATTERN_OUT_VIDEO_MEMORY | MFX_IOPATTERN_IN_VIDEO_MEMORY;
         ASSERT (m_pD3dDeviceManager == NULL);
 
         // Couldn't create our own device - probably a full screen exclusive player.
@@ -685,7 +677,7 @@ done:
     else
     {
         m_bUseD3DAlloc = false;
-        m_pVideoParams->IOPattern = MFX_IOPATTERN_OUT_SYSTEM_MEMORY;
+        m_pVideoParams->IOPattern = MFX_IOPATTERN_OUT_SYSTEM_MEMORY | MFX_IOPATTERN_IN_SYSTEM_MEMORY;
         m_pFrameAllocator = new SysMemFrameAllocator();
     }
 
@@ -738,6 +730,9 @@ bool CQuickSyncDecoder::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceMana
 unsigned CQuickSyncDecoder::DecoderWorkerThreadProc(void* pThis)
 {
     ASSERT(pThis != NULL);
+    if (NULL == pThis)
+        return 1;
+
     return static_cast<CQuickSyncDecoder*>(pThis)->DecoderWorkerThreadMsgLoop();
 }
 

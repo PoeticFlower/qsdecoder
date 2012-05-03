@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.31 Beta"
+#define QS_DEC_VERSION  "v0.32 Beta"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -40,7 +40,11 @@ enum QsCaps
 {
     QS_CAP_UNSUPPORTED      = 0,
     QS_CAP_HW_ACCELERATION  = 1,
-    QS_CAP_SW_EMULATION     = 2
+    QS_CAP_SW_EMULATION     = 2,
+    QS_CAP_DEINTERLACING    = 4,
+    QS_CAP_DETAIL           = 8,
+    QS_CAP_DENOISE          = 16,
+    QS_CAP_PROCAMP          = 32
 };
 
 // This struct holds an output frame + meta data
@@ -134,15 +138,17 @@ struct CQsConfig
         };
     };
 
-    // Video post processing
+    // Video post processing options
     union
     {
         unsigned vpp;
         struct
         {
-            bool  bEnableDeinterlacing :  1;
-            bool  bEnableFilmDetection :  1;
-            unsigned reserved3         : 30;
+            bool     bVppEnableDeinterlacing :  1;
+            bool     bVppEnableFullRateDI    :  1; // true-> double frame rate
+            unsigned nVppDetailStrength      :  7; // Values are [0-64], 0 - disabled, 64 - full.
+            unsigned nVppDenoiseStrength     :  7; // Values are [0-64], 0 - disabled, 64 - full.
+            unsigned reserved3               : 16;
         };
     };
 };
@@ -152,9 +158,8 @@ struct IQuickSyncDecoder
 {
     typedef HRESULT (*TQS_DeliverSurfaceCallback) (void* obj, QsFrameData* data);
 
-    // useless constructor to keep several compilers happy...
+    // Useless constructor to keep several compilers happy...
     IQuickSyncDecoder() {}
-
 
     // Object is OK
     virtual bool getOK() = 0;

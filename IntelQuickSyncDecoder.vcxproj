@@ -246,6 +246,7 @@
     <ClInclude Include="frame_constructors.h" />
     <ClInclude Include="QuickSync.h" />
     <ClInclude Include="QuickSyncUtils.h" />
+    <ClInclude Include="QuickSyncVPP.h" />
     <ClInclude Include="QuickSync_defs.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
@@ -261,6 +262,7 @@
     <ClCompile Include="frame_constructors.cpp" />
     <ClCompile Include="QuickSync.cpp" />
     <ClCompile Include="QuickSyncUtils.cpp" />
+    <ClCompile Include="QuickSyncVPP.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
