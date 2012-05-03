@@ -46,6 +46,11 @@
 
 #define MSDK_MAX_FILENAME_LEN 1024
 
+#define MAX_SURFACES 256
+
+#define DECODE_QUEUE_LENGTH 16
+#define PROCESS_QUEUE_LENGTH 2
+
 #ifndef countof
 #   define countof(array) (size_t)(sizeof(array)/sizeof(array[0]))
 #endif

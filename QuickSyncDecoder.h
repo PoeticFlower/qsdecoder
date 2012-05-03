@@ -31,8 +31,6 @@
 #include "d3d_allocator.h"
 #include "sysmem_allocator.h"
 
-#define MAX_SURFACES 256
-
 typedef std::deque<mfxFrameSurface1*> TSurfaceQueue;
 typedef void (*TDecodeComplete)(mfxFrameSurface1* pSurface, void* obj);
 
@@ -71,6 +69,7 @@ public:
     mfxStatus CreateAllocator();
     mfxStatus InitFrameAllocator(mfxVideoParam* pVideoParams, mfxU32 nPitch);
     mfxStatus FreeFrameAllocator();
+    MFXFrameAllocator* GetFrameAllocator() { return m_pFrameAllocator; }
 
     inline mfxIMPL QueryIMPL()
     {
@@ -165,9 +164,14 @@ public:
         m_nAuxFrameCount = (mfxU16)count;
     }
 
+    mfxFrameSurface1* FindFreeSurface();
+    inline MFXVideoSession* GetSession()
+    {
+        return m_mfxVideoSession;
+    }
+
 protected:
     mfxStatus         InternalReset(mfxVideoParam* pVideoParams, mfxU32 nPitch, bool bInited);
-    mfxFrameSurface1* FindFreeSurface();
     mfxStatus         InitSession(mfxIMPL impl);
     void              CloseSession();
     mfxStatus         InitD3D();

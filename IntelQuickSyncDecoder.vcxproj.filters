@@ -68,6 +68,9 @@
     <ClInclude Include="QuickSyncUtils.h">
       <Filter>Header Files\Utility</Filter>
     </ClInclude>
+    <ClInclude Include="QuickSyncVPP.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -102,6 +105,9 @@
     </ClCompile>
     <ClCompile Include="QuickSyncUtils.cpp">
       <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="QuickSyncVPP.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

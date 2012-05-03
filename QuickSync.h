@@ -86,7 +86,7 @@ protected:
     HRESULT HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxVideoParam& videoParams, CFrameConstructor*& pFrameContructor);
     HRESULT CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize);
     HRESULT QueueSurface(mfxFrameSurface1* pSurface, bool async);
-    HRESULT ProcessDecodedFrame(mfxFrameSurface1* pSurface);
+    HRESULT ProcessDecodedFrame(mfxFrameSurface1* pOutSurface);
     void    ClearQueue();
     int DeliverSurface(bool bWaitForCompletion);
     virtual void SetDeliverSurfaceCallback(void* obj, TQS_DeliverSurfaceCallback func)
@@ -99,7 +99,7 @@ protected:
     virtual void GetConfig(CQsConfig* pConfig);
     virtual void SetConfig(CQsConfig* pConfig);
 
-    bool SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData);
+    bool SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStart);
     void SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo);
     void UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& frameData);
     mfxStatus ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN, mfxU32& nFrameRateExtD);
@@ -108,7 +108,10 @@ protected:
     inline void PushSurface(mfxFrameSurface1* pSurface);
     inline mfxFrameSurface1* PopSurface();
     void FlushOutputQueue();
+    void FlushVPP();
+    bool IsVppNeeded(mfxU32 picStruct);
     unsigned ProcessorWorkerThreadMsgLoop();
+    void CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, CQsAlignedBuffer*& pOutBuffer);
 
     // Static methods
     static void OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj);
@@ -121,7 +124,8 @@ protected:
     TQS_DeliverSurfaceCallback m_DeliverSurfaceCallback; // Callback for receiving frames
     CQsLock             m_csLock;                  // Object lock
     CQuickSyncDecoder*  m_pDecoder;                // Low level decoder
-    mfxVideoParam       m_mfxParamsVideo;          // MSDK video parameters
+    CQuickSyncVPP*      m_pVPP;                    // Low level Video Processor
+    mfxVideoParam       m_DecVideoParams;          // MSDK video parameters
     mfxU32              m_nPitch;                  // Frame pitch, used for resetting the decoder
     CDecTimeManager     m_TimeManager;             // Manages time stamps
     CFrameConstructor*  m_pFrameConstructor;       // A stream converter - may modify stream to make HW decoder happy
@@ -132,6 +136,7 @@ protected:
     CQsConfig           m_Config;                  // Global config
     HANDLE              m_hProcessorWorkerThread;   
     unsigned            m_ProcessorWorkerThreadId;
+    mfxU32              m_PicStruct;
 
     typedef std::pair<QsFrameData*, CQsAlignedBuffer*> TQsQueueItem;
 

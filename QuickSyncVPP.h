@@ -1,0 +1,98 @@
+/*
+ * Copyright (c) 2011, INTEL CORPORATION
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ * 
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation and/or
+ * other materials provided with the distribution.
+ * Neither the name of INTEL CORPORATION nor the names of its contributors may
+ * be used to endorse or promote products derived from this software without specific
+ * prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+ * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#pragma once
+
+#include "d3d_allocator.h"
+#include "sysmem_allocator.h"
+
+class CQuickSyncVPP
+{
+public:
+    CQuickSyncVPP(bool bUseD3dAlloc, MFXFrameAllocator* pFrameAllocator);
+    virtual ~CQuickSyncVPP();
+    mfxStatus Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxVideoParam* pDecVideoParams, mfxFrameSurface1* pSurface);
+    mfxStatus Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1* pOutSurface);
+    mfxFrameSurface1* FindFreeSurface();
+
+    __forceinline void LockSurface(mfxFrameSurface1* pSurface)
+    {
+        size_t i = pSurface - m_pFrameSurfaces;
+        ASSERT(i < m_nRequiredFramesNum);
+
+        if (i < m_nRequiredFramesNum)
+        {
+            InterlockedIncrement(&m_LockedSurfaces[i]);
+        }
+    }
+
+    __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
+    {
+        size_t i = pSurface - m_pFrameSurfaces;
+        ASSERT(i < m_nRequiredFramesNum);
+
+        if (i < m_nRequiredFramesNum)
+        {
+            InterlockedDecrement(&m_LockedSurfaces[i]);
+        }
+    }
+
+    __forceinline bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
+    {
+        size_t i = pSurface - m_pFrameSurfaces;
+        ASSERT(i < m_nRequiredFramesNum);
+        return m_LockedSurfaces[i] > 0 || pSurface->Data.Locked > 0;
+    }
+
+protected:
+    void Close();
+    mfxStatus InitFrameAllocator(mfxVideoParam* pVideoParams);
+    mfxStatus FreeFrameAllocator();
+    void Flush();
+
+    MFXVideoVPP*     m_pVPP;
+    mfxVideoParam*   m_pVideoParams;
+
+    MFXVideoSession* m_pVideoSession;
+    mfxVersion       m_ApiVersion;
+    CQsConfig        m_Config;
+    mfxU32           m_nPitch;
+
+    // Allocator
+    MFXFrameAllocator*    m_pFrameAllocator;
+    mfxFrameSurface1*     m_pFrameSurfaces;
+    mfxFrameAllocResponse m_AllocResponse;
+    mfxU16                m_nRequiredFramesNum;
+    bool                  m_bUseD3DAlloc;
+    volatile LONG         m_LockedSurfaces[MAX_SURFACES];
+
+    CQsLock  m_csLock;
+
+private:
+   DISALLOW_COPY_AND_ASSIGN(CQuickSyncVPP);
+};

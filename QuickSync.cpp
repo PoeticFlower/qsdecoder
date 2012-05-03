@@ -34,6 +34,7 @@
 #include "QuickSyncUtils.h"
 #include "frame_constructors.h"
 #include "QuickSyncDecoder.h"
+#include "QuickSyncVPP.h"
 #include "QuickSync.h"
 
 #define PAGE_MASK 4095
@@ -46,14 +47,12 @@ EXTERN_GUID(WMMEDIASUBTYPE_WMV3,
 DEFINE_GUID(WMMEDIASUBTYPE_WVC1_PDVD,
 0xD979F77B, 0xDBEA, 0x4BF6, 0x9E, 0x6D, 0x1D, 0x7E, 0x57, 0xFB, 0xAD, 0x53);
 
-#define DECODE_QUEUE_LENGTH 16
-#define PROCESS_QUEUE_LENGTH 2
-
 ////////////////////////////////////////////////////////////////////
 //                      CQuickSync
 ////////////////////////////////////////////////////////////////////
 CQuickSync::CQuickSync() :
     m_bInitialized(false),
+    m_pVPP(NULL),
     m_nPitch(0),
     m_pFrameConstructor(NULL),
     m_nSegmentFrameCount(0),
@@ -72,9 +71,9 @@ CQuickSync::CQuickSync() :
     m_pDecoder = new CQuickSyncDecoder(sts);
     m_pDecoder->SetOnDecodeComplete(&CQuickSync::OnDecodeComplete, this);
 
-    MSDK_ZERO_VAR(m_mfxParamsVideo);
-    //m_mfxParamsVideo.AsyncDepth = 1; //causes issues when 1
-    m_mfxParamsVideo.mfx.ExtendedPicStruct = 1;
+    MSDK_ZERO_VAR(m_DecVideoParams);
+    m_DecVideoParams.AsyncDepth = 2; //causes issues when 1
+    m_DecVideoParams.mfx.ExtendedPicStruct = 1;
 
     // Set default configuration - override what's not zero/false
 //    m_Config.bMod16Width = true;
@@ -95,6 +94,13 @@ CQuickSync::CQuickSync() :
 
     // Currently not working well - menu decoding :(
     //m_Config.bEnableDvdDecoding = true;
+
+    // VPP
+    m_Config.bEnableVideoProcessing  = true;
+    m_Config.bVppEnableDeinterlacing = true;
+    m_Config.bVppEnableFullRateDI    = true;
+//    m_Config.nVppDetailStrength      = 32; // 0-64
+//    m_Config.nVppDenoiseStrength     = 16; // 0-64
 
     m_OK = (sts == MFX_ERR_NONE);
 }
@@ -407,7 +413,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
     VIDEOINFOHEADER2* vih2 = NULL;
     mfxStatus sts = MFX_ERR_NONE;
-    mfxInfoMFX& mfx = m_mfxParamsVideo.mfx;
+    mfxInfoMFX& mfx = m_DecVideoParams.mfx;
     HRESULT hr;
     MSDK_CHECK_POINTER(mtIn, E_POINTER);
     MSDK_CHECK_POINTER(mtIn->pbFormat, E_UNEXPECTED);
@@ -417,7 +423,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (!(mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK || mtIn->majortype == MEDIATYPE_Video))
         return VFW_E_INVALIDMEDIATYPE;
 
-    hr = DecodeHeader(mtIn, fourCC, m_pFrameConstructor, vih2, nSampleSize, nVideoInfoSize, m_mfxParamsVideo);
+    hr = DecodeHeader(mtIn, fourCC, m_pFrameConstructor, vih2, nSampleSize, nVideoInfoSize, m_DecVideoParams);
 
     // Setup frame rate from either the media type or the decoded header
     bIsFields = (vih2->dwInterlaceFlags & AMINTERLACE_IsInterlaced) &&
@@ -438,7 +444,8 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     // We might decode well even if DecodeHeader failed with MFX_ERR_MORE_DATA
     MSDK_IGNORE_MFX_STS(sts, MFX_ERR_MORE_DATA);
 
-    m_nPitch = mfx.FrameInfo.Width;
+    m_nPitch = (mfxU16)MSDK_ALIGN32(mfx.FrameInfo.Width);
+    mfx.FrameInfo.Height = (mfxU16)MSDK_ALIGN32(mfx.FrameInfo.Height);
 
     SetAspectRatio(*vih2, mfx.FrameInfo);
 
@@ -447,11 +454,20 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     m_Config.bEnableMtDecode     = m_Config.bEnableMtDecode     && m_Config.bEnableMtProcessing; // This feature relies on bEnableMtProcessing
     m_Config.bEnableMtCopy       = m_Config.bEnableMtCopy       && m_Config.bEnableMultithreading;
 
+    // Video processing
+    if (m_Config.bEnableVideoProcessing)
+    {
+        // DI doesn't like changing the time stamps
+        if (m_Config.bVppEnableDeinterlacing)
+        {
+//            m_Config.bTimeStampCorrection = false;
+        }
+    }
+
     // Create worker thread
     if (m_Config.bEnableMtProcessing)
     {
         m_hProcessorWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &ProcessorWorkerThreadProc, this, 0, &m_ProcessorWorkerThreadId);
-        //SetThreadPriority(m_hProcessorWorkerThread, THREAD_PRIORITY_HIGHEST);
     }
 
     // Fill free frames pool
@@ -470,7 +486,10 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (sts == MFX_ERR_NONE)
     {
         m_pDecoder->SetConfig(m_Config);
-        m_pDecoder->SetAuxFramesCount(max(8, m_Config.nOutputQueueLength) + DECODE_QUEUE_LENGTH);
+        size_t surfaceCount = max(8, m_Config.nOutputQueueLength) + DECODE_QUEUE_LENGTH;
+        if (m_Config.bVppEnableDeinterlacing) surfaceCount += 5;
+
+        m_pDecoder->SetAuxFramesCount(surfaceCount);
     }
 
     delete[] (mfxU8*)vih2;
@@ -618,12 +637,13 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             MSDK_TRACE("QsDecoder: Decode MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
 
             // Flush existing frames
+            // Will also destroy the VPP
             Flush(true);
 
             // Retrieve new parameters
             mfxVideoParam VideoParams;
             MSDK_ZERO_VAR(VideoParams);
-            VideoParams.mfx.CodecId = m_mfxParamsVideo.mfx.CodecId;
+            VideoParams.mfx.CodecId = m_DecVideoParams.mfx.CodecId;
             sts = m_pDecoder->DecodeHeader(&mfxBS, &VideoParams); 
             if (MFX_ERR_MORE_DATA == sts)
             {
@@ -631,10 +651,10 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             }
 
             // Save IOPattern and update parameters
-            VideoParams.IOPattern = m_mfxParamsVideo.IOPattern; 
-            memcpy(&m_mfxParamsVideo, &VideoParams, sizeof(mfxVideoParam));
-            m_nPitch = MSDK_ALIGN16(m_mfxParamsVideo.mfx.FrameInfo.Width);
-            sts = m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
+            VideoParams.IOPattern = m_DecVideoParams.IOPattern; 
+            memcpy(&m_DecVideoParams, &VideoParams, sizeof(mfxVideoParam));
+            m_nPitch = MSDK_ALIGN32(m_DecVideoParams.mfx.FrameInfo.Width);
+            sts = m_pDecoder->Reset(&m_DecVideoParams, m_nPitch);
             if (MFX_ERR_NONE == sts)
             {
                 continue;
@@ -680,7 +700,7 @@ int CQuickSync::DeliverSurface(bool bWaitForCompletion)
                 {
                     QsFrameData* pFrameData = item.first;
                     // Send the surface out - return code from dshow filter is ignored.
-                    MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
+                    MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d)\n", pFrameData->rtStart);
                     m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
                     ++sentFrames;
                 }
@@ -691,13 +711,13 @@ int CQuickSync::DeliverSurface(bool bWaitForCompletion)
     }
     else
     {
-        if (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait, use what's ready*/))
+        while (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait, use what's ready*/))
         {
             if (!m_bNeedToFlush)
             {
                 QsFrameData* pFrameData = item.first;
                 // Send the surface out - return code from dshow filter is ignored.
-                MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d, %I64d)\n", pFrameData->rtStart, pFrameData->rtStop);
+                MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d)\n", pFrameData->rtStart);
                 m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
                 ++sentFrames;
             }
@@ -802,11 +822,15 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     // Flush internal queue again
     FlushOutputQueue();
     
+    // If VPP is active, we may need to flush it
+    FlushVPP();
+
     m_TimeManager.Reset();
 
     // All data has been flushed
     m_bNeedToFlush = false;
 
+    MSDK_SAFE_DELETE(m_pVPP);
     MSDK_TRACE("QsDecoder: Flush ended\n");
     return hr;
 }
@@ -867,14 +891,17 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
     m_bNeedToFlush = true;
     mfxStatus sts = MFX_ERR_NONE;
     m_nSegmentFrameCount = 0;
+    m_PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
 
-    // Make sure the worker thread is idle and released all released all resources
+    // Make sure the worker thread is idle and released all resources
     FlushOutputQueue();
 
     if (m_pDecoder)
     {
         m_TimeManager.Reset();
-        sts = m_pDecoder->Reset(&m_mfxParamsVideo, m_nPitch);
+        MSDK_SAFE_DELETE(m_pVPP);
+
+        sts = m_pDecoder->Reset(&m_DecVideoParams, m_nPitch);
         if (sts != MFX_ERR_NONE)
         {
             MSDK_TRACE("QsDecoder: reset failed!\n");
@@ -890,7 +917,7 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
     return (sts == MFX_ERR_NONE) ? S_OK : E_FAIL;
 }
 
-bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData)
+bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStart)
 {
     // Find corrected time stamp
     if (m_Config.bTimeStampCorrection)
@@ -899,15 +926,15 @@ bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, QsFrameData& frameData
         frames.push_back(pSurface);
         auto queue = m_pDecoder->GetOutputQueue();
         frames.insert(frames.end(), queue.begin(), queue.end());
-        if (!m_TimeManager.GetSampleTimeStamp(frames, frameData.rtStart, frameData.rtStop))
+        if (!m_TimeManager.GetSampleTimeStamp(frames, rtStart))
             return false;
     
-        return frameData.rtStart >= 0;
+        return pSurface->Data.TimeStamp >= 0;
     }
 
     // Just convert the time stamp from the HW decoder
-    frameData.rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
-    frameData.rtStop = (INVALID_REFTIME == frameData.rtStart) ? INVALID_REFTIME : frameData.rtStart + 1;
+    rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
+
     return true; // Return all frames DS filter will handle this
 }
 
@@ -918,7 +945,7 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
     mfxStatus sts = m_pDecoder->GetVideoParams(&params);
     MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
 
-    mfxFrameInfo& curInfo = m_mfxParamsVideo.mfx.FrameInfo;
+    mfxFrameInfo& curInfo = m_DecVideoParams.mfx.FrameInfo;
     mfxFrameInfo& newInfo = params.mfx.FrameInfo;
 
     bool bFrameRateChange = (curInfo.FrameRateExtN != newInfo.FrameRateExtN) || (curInfo.FrameRateExtD != newInfo.FrameRateExtD);
@@ -927,9 +954,9 @@ mfxStatus CQuickSync::OnVideoParamsChanged()
         return MFX_ERR_NONE;
 
     // Copy video params
-    params.AsyncDepth = m_mfxParamsVideo.AsyncDepth;
-    params.IOPattern = m_mfxParamsVideo.IOPattern;
-    memcpy(&m_mfxParamsVideo, &params, sizeof(params));
+    params.AsyncDepth = m_DecVideoParams.AsyncDepth;
+    params.IOPattern = m_DecVideoParams.IOPattern;
+    memcpy(&m_DecVideoParams, &params, sizeof(params));
 
     // Flush images with old parameters
     FlushOutputQueue();
@@ -1032,6 +1059,9 @@ void CQuickSync::SetConfig(CQsConfig* pConfig)
 unsigned CQuickSync::ProcessorWorkerThreadProc(void* pThis)
 {
     ASSERT(pThis != NULL);
+    if (NULL == pThis)
+        return 1;
+
     return static_cast<CQuickSync*>(pThis)->ProcessorWorkerThreadMsgLoop();
 }
 
@@ -1084,22 +1114,22 @@ HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
 }
 
 // This function works on a worker thread
-HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
+HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
 {
     MSDK_VTRACE("QsDecoder: ProcessDecodedFrame\n");
 
     // Got a new surface. A NULL surface means to get a surface from the output queue
-    if (pSurface != NULL)
+    if (pOutSurface != NULL)
     {
         // Initial frames with invalid times are discarded
-        REFERENCE_TIME rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
+        REFERENCE_TIME rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pOutSurface->Data.TimeStamp);
         if (m_pDecoder->OutputQueueEmpty() && rtStart == INVALID_REFTIME && m_Config.bTimeStampCorrection)
         {
-            m_pDecoder->UnlockSurface(pSurface);
+            m_pDecoder->UnlockSurface(pOutSurface);
             return S_OK;
         }
 
-        PushSurface(pSurface);
+        PushSurface(pOutSurface);
 
         // Not enough surfaces for proper time stamp correction
         size_t queueSize = (m_bDvdDecoding) ? 0 : m_Config.nOutputQueueLength;
@@ -1110,60 +1140,162 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     }
 
     // Get oldest surface from queue
-    pSurface = PopSurface();
-    MSDK_CHECK_POINTER(pSurface, S_OK); // Decoder queue is empty - return without error
-    
-    TQsQueueItem item;
-    while (!m_FreeFramesPool.PopFront(item, 10))
-    {
-        // A flush event has just occurred - abort frame processing
-        if (m_bNeedToFlush)
-        {
-            m_pDecoder->UnlockSurface(pSurface);
-            return S_OK;
-        }
-    }
+    pOutSurface = PopSurface();
+    // Decoder queue is empty - return without error
+    MSDK_CHECK_POINTER(pOutSurface, S_OK);
 
-    QsFrameData* pOutFrameData = item.first;
-    QsFrameData& outFrameData = *pOutFrameData;
-    CQsAlignedBuffer*& pOutBuffer = item.second;
-
-    // Clear the outFrameData
-    MSDK_ZERO_VAR(outFrameData);
-
-    UpdateAspectRatio(pSurface, outFrameData);
-    outFrameData.fourCC = pSurface->Info.FourCC;
-
-    if (pSurface->Data.Corrupted)
-    {
-        outFrameData.bCorrupted = true;
-        MSDK_TRACE("QsDecoder: warning received a corrupted frame\n");
-
-        // Discard corrupted frames at the start of a sequence
-        // Speeds up seeking 
-        if (0 == m_nSegmentFrameCount)
-        {
-            m_FreeFramesPool.PushBack(item, 0);
-            m_pDecoder->UnlockSurface(pSurface);
-            return S_OK;
-        }
-    }
-
-    ++m_nSegmentFrameCount;
-     
     // Result is in outFrameData
     // False return value means that the frame has a negative time stamp and should not be displayed.
-    if (!SetTimeStamp(pSurface, outFrameData))
+    REFERENCE_TIME rtStart;
+    bool bDiscardFrame = !SetTimeStamp(pOutSurface, rtStart);
+
+    // Init VPP
+    if (m_Config.bEnableVideoProcessing)
     {
-        // Return frame to free pool
-        m_FreeFramesPool.PushBack(item, 0);
-        m_pDecoder->UnlockSurface(pSurface);
-        return S_OK;
+        // Init VPP if needed
+        if (!m_pVPP && !m_bNeedToFlush && IsVppNeeded(pOutSurface->Info.PicStruct))
+        {
+            m_pVPP = new CQuickSyncVPP(m_pDecoder->IsD3DAlloc(), m_pDecoder->GetFrameAllocator());
+            mfxStatus sts = m_pVPP->Reset(m_Config, m_pDecoder->GetSession(), &m_DecVideoParams, pOutSurface);
+            
+            if (sts < 0 || MFX_WRN_VALUE_NOT_CHANGED == sts)
+            {
+                // Change config to disbale VPP
+                m_Config.bEnableVideoProcessing = false;
+                MSDK_SAFE_DELETE(m_pVPP);
+            }
+        }
     }
+
+    // Store original surface
+    mfxFrameSurface1* pInSurface = pOutSurface;
+    mfxStatus sts = MFX_ERR_NONE;
+
+    // Set corrected time stamp
+    pInSurface->Data.TimeStamp = m_TimeManager.ConvertReferenceTime2MFXTime(rtStart);
+
+    while (!m_bNeedToFlush)
+    {
+        // Apply VPP
+        if (m_pVPP)
+        {
+            // Find output surface
+            pOutSurface = m_pVPP->FindFreeSurface();
+            ASSERT(pOutSurface);
+            if (NULL == pOutSurface)
+            {
+                MSDK_TRACE("QsDecoder: Failed to find VPP surface!\n");
+                break;
+            }
+
+            m_pVPP->LockSurface(pOutSurface);
+
+            // Run VPP
+            sts = m_pVPP->Process(pInSurface, pOutSurface);
+
+            // VPP failed
+            if (sts < 0 && sts != MFX_ERR_MORE_SURFACE)
+            {
+                m_pVPP->UnlockSurface(pOutSurface);
+                pOutSurface = pInSurface;
+            }
+
+            // Copy AR info - this wasn't preserved in the VPP process...
+            pOutSurface->Info.AspectRatioH = pInSurface->Info.AspectRatioH;
+            pOutSurface->Info.AspectRatioW = pInSurface->Info.AspectRatioW;
+        }
+
+        TQsQueueItem item;
+        while (!m_FreeFramesPool.PopFront(item, 5))
+        {
+            if (m_bNeedToFlush)
+            {
+                if (m_pVPP)
+                {
+                    m_pVPP->UnlockSurface(pOutSurface);
+                }
+
+                goto done;
+            }
+        }
+
+        QsFrameData* pOutFrameData = item.first;
+        QsFrameData& outFrameData = *pOutFrameData;
+        CQsAlignedBuffer*& pOutBuffer = item.second;
+
+        // Clear the outFrameData
+        MSDK_ZERO_VAR(outFrameData);
+
+        if (pOutSurface->Data.Corrupted)
+        {
+            outFrameData.bCorrupted = true;
+            MSDK_TRACE("QsDecoder: warning received a corrupted frame\n");
+
+            // Discard corrupted frames at the start of a sequence
+            // Speeds up seeking 
+            if (0 == m_nSegmentFrameCount)
+            {
+                bDiscardFrame = true;
+            }
+        }
+
+        // If input frame was meant to be discarded then we still want to VPP to work -
+        // minimize VPP initialization artifacts
+        if (bDiscardFrame || m_bNeedToFlush)
+        {
+            // Return frame to free pool
+            m_FreeFramesPool.PushBack(item, 0);
+        }
+        else
+        {
+            CopyFrame(pOutSurface, outFrameData, pOutBuffer);
+
+            // Keep or drop the processed frame
+            if (!m_bNeedToFlush)
+            {
+                // Enter result in the processed queue
+                m_ProcessedFramesQueue.PushBack(item, 0);
+            }
+            else
+            {
+                // Return to free pool
+                m_FreeFramesPool.PushBack(item, 0);
+            }
+        }
+
+        // Unlock VPP surface
+        if (m_pVPP && pOutSurface != pInSurface /* They are equal in case of failure */)
+        {
+            m_pVPP->UnlockSurface(pOutSurface);
+        }
+
+        // VPP might have another surface ready (DI active)
+        if (MFX_ERR_MORE_SURFACE != sts)
+            break;
+    }
+
+done:
+    ++m_nSegmentFrameCount; // Count only input frames
+
+    // Released decoder surface
+    m_pDecoder->UnlockSurface(pInSurface);
+
+    MSDK_VTRACE("QsDecoder: ProcessDecodedFrame completed\n");
+    return S_OK;
+}
+
+void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, CQsAlignedBuffer*& pOutBuffer)
+{
+    UpdateAspectRatio(pSurface, outFrameData);
+    outFrameData.fourCC = pSurface->Info.FourCC;
 
     // Setup interlacing info
     PicStructToDsFlags(pSurface->Info.PicStruct, outFrameData.dwInterlaceFlags, outFrameData.frameStructure);
     outFrameData.bFilm = 0 != (outFrameData.dwInterlaceFlags & AM_VIDEO_FLAG_REPEAT_FIELD);
+
+    // Time stamp
+    outFrameData.rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
+    outFrameData.rtStop = (outFrameData.rtStart == INVALID_REFTIME) ? INVALID_REFTIME : (outFrameData.rtStart + 1);
     
     // TODO: find actual frame type I/P/B
     // Media sample isn't reliable as it referes to an older frame!
@@ -1233,11 +1365,8 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     // Unlock the frame
     m_pDecoder->UnlockFrame(pSurface, &frameData);
 
-    // We don't need the surface anymore
-    m_pDecoder->UnlockSurface(pSurface);
-
 #ifdef _DEBUG
-    // Debug only - mark top left corner when working with D3D
+    // Debug only - mark top left corner: when working with D3D
     ULONGLONG markY = 0;
     ULONGLONG markUV = (m_pDecoder->IsHwAccelerated()) ? 0x80FF80FF80FF80FF : 0xFF80FF80FF80FF80;
     *((ULONGLONG*)outFrameData.y) = markY;
@@ -1247,21 +1376,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pSurface)
     *((ULONGLONG*)outFrameData.u) = markUV; // 4 blue (hw) or red (sw)
     *((ULONGLONG*)(outFrameData.u + outFrameData.dwStride)) = markUV;
 #endif
-
-    // Keep or drop the processed frame
-    if (!m_bNeedToFlush)
-    {
-        // Enter result in the processed queue
-        m_ProcessedFramesQueue.PushBack(item, 0);
-    }
-    else
-    {
-        // Return to free pool
-        m_FreeFramesPool.PushBack(item, 0);
-    }
-
-    MSDK_VTRACE("QsDecoder: ProcessDecodedFrame completed\n");
-    return S_OK;
 }
 
 void CQuickSync::UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& frameData)
@@ -1274,10 +1388,110 @@ void CQuickSync::UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& fram
 
 void CQuickSync::OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj)
 {
+    ASSERT(obj != NULL);
+    if (NULL == obj)
+        return;
+
     // Note - this function is called from the decode thread.
     CQuickSync* pThis = (CQuickSync*)obj;
-    ASSERT(pThis != NULL);
 
     // Post message to worker thread
     pThis->m_DecodedFramesQueue.PushBack(pSurface, INFINITE);
+}
+
+void CQuickSync::FlushVPP()
+{
+    MSDK_CHECK_POINTER_NO_RET(m_pVPP);
+
+    while (!m_bNeedToFlush)
+    {
+        // Find output surface
+        mfxFrameSurface1* pOutSurface = m_pVPP->FindFreeSurface();
+        ASSERT(pOutSurface);
+        if (NULL == pOutSurface)
+        {
+            MSDK_TRACE("QsDecoder: Failed to find VPP surface!\n");
+            break;
+        }
+
+        m_pVPP->LockSurface(pOutSurface);
+
+        // Run VPP
+        mfxStatus sts = m_pVPP->Process(NULL, pOutSurface);
+
+        // VPP failed or ran out of frames
+        if (MFX_ERR_NONE != sts && MFX_ERR_MORE_SURFACE != sts)
+        {
+            break;
+        }
+
+        TQsQueueItem item;
+        while (!m_FreeFramesPool.PopFront(item, 5))
+        {
+            if (m_bNeedToFlush)
+            {
+                if (m_pVPP)
+                {
+                    m_pVPP->UnlockSurface(pOutSurface);
+                }
+
+                break;
+            }
+        }
+
+        QsFrameData* pOutFrameData = item.first;
+        QsFrameData& outFrameData = *pOutFrameData;
+        CQsAlignedBuffer*& pOutBuffer = item.second;
+
+        // Clear the outFrameData
+        MSDK_ZERO_VAR(outFrameData);
+
+        // If input frame was meant to be discarded then we still want to VPP to work -
+        // minimize VPP initialization artifacts
+        if (m_bNeedToFlush)
+        {
+            // Return frame to free pool
+            m_FreeFramesPool.PushBack(item, 0);
+        }
+        else
+        {
+            CopyFrame(pOutSurface, outFrameData, pOutBuffer);
+
+            // Keep or drop the processed frame
+            if (!m_bNeedToFlush)
+            {
+                // Enter result in the processed queue
+                m_ProcessedFramesQueue.PushBack(item, 0);
+            }
+            else
+            {
+                // Return to free pool
+                m_FreeFramesPool.PushBack(item, 0);
+            }
+        }
+
+        m_pVPP->UnlockSurface(pOutSurface);
+
+        DeliverSurface(true);
+    }
+}
+
+bool CQuickSync::IsVppNeeded(mfxU32 picStruct)
+{
+    if (!m_Config.bEnableVideoProcessing)
+        return false;
+
+    // Detail and Denoise
+    if (m_Config.nVppDetailStrength || m_Config.nVppDenoiseStrength)
+        return true;
+
+    // Note - m_PicStruct is set to progressive in OnSeek()
+
+    // DI might be needed as frame type changed - m_PicStruct remembers the last non progressive type
+    if (m_PicStruct != picStruct && picStruct != MFX_PICSTRUCT_PROGRESSIVE)
+    {
+        m_PicStruct = picStruct;
+    }
+
+    return m_PicStruct != MFX_PICSTRUCT_PROGRESSIVE;
 }
