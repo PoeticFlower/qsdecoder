@@ -76,7 +76,6 @@ CQuickSync::CQuickSync() :
     m_DecVideoParams.mfx.ExtendedPicStruct = 1;
 
     // Set default configuration - override what's not zero/false
-//    m_Config.bMod16Width = true;
     m_Config.bTimeStampCorrection = true;
 
     m_Config.nOutputQueueLength = 8;
@@ -378,12 +377,7 @@ HRESULT CQuickSync::DecodeHeader(
     // Simple info header (without extra data) or DecodeHeader failed (usually not critical)
     else
     {
-        mfx.FrameInfo.CropW = (mfxU16)vih2->bmiHeader.biWidth;
-        if (m_Config.bMod16Width)
-        {
-            mfx.FrameInfo.CropW = MSDK_ALIGN16(mfx.FrameInfo.CropW);
-        }
-
+        mfx.FrameInfo.CropW        = (mfxU16)vih2->bmiHeader.biWidth;
         mfx.FrameInfo.CropH        = (mfxU16)vih2->bmiHeader.biHeight;
         mfx.FrameInfo.Width        = (mfxU16)MSDK_ALIGN16(mfx.FrameInfo.CropW);
         mfx.FrameInfo.Height       = (mfxU16)MSDK_ALIGN16(mfx.FrameInfo.CropH);
@@ -433,6 +427,14 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (0 < vih2->AvgTimePerFrame)
     {
         m_TimeManager.SetFrameRate(1e7 / vih2->AvgTimePerFrame, bIsFields);
+
+        // Workaround for buggy SDK frame manipulation when H264 SPS header contains a zero frame rate
+        if (0 == mfx.FrameInfo.FrameRateExtN * mfx.FrameInfo.FrameRateExtD)
+        {
+            ConvertFrameRate((vih2->AvgTimePerFrame) ? 1e7 / vih2->AvgTimePerFrame : 0, 
+                mfx.FrameInfo.FrameRateExtN, 
+                mfx.FrameInfo.FrameRateExtD);
+        }
     }
     // In case we don't have a frame rate
     else if (mfx.FrameInfo.FrameRateExtN * mfx.FrameInfo.FrameRateExtD != 0)
@@ -499,12 +501,10 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
 void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& frameInfo)
 {
-    DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(frameInfo.CropW) : frameInfo.CropW;
-    
     // Fix small aspect ratio errors
-    if (MSDK_ALIGN16(vih2.dwPictAspectRatioX) == alignedWidth)
+    if (MSDK_ALIGN16(vih2.dwPictAspectRatioX) == frameInfo.CropW)
     {
-        vih2.dwPictAspectRatioX = alignedWidth;
+        vih2.dwPictAspectRatioX = frameInfo.CropW;
     }
 
     // AR is not always contained in the header (it's optional for MFX decoder initialization though)
@@ -1091,12 +1091,6 @@ unsigned CQuickSync::ProcessorWorkerThreadMsgLoop()
 // Only called when decoding is not async.
 HRESULT CQuickSync::QueueSurface(mfxFrameSurface1* pSurface, bool async)
 {
-    // The surface is locked from being reused in another Decode call
-    if (NULL != pSurface)
-    {
-        m_pDecoder->LockSurface(pSurface);
-    }
-
     if (async && m_Config.bEnableMtProcessing)
     {
         // Post message to worker thread
@@ -1179,17 +1173,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
         // Apply VPP
         if (m_pVPP)
         {
-            // Find output surface
-            pOutSurface = m_pVPP->FindFreeSurface();
-            ASSERT(pOutSurface);
-            if (NULL == pOutSurface)
-            {
-                MSDK_TRACE("QsDecoder: Failed to find VPP surface!\n");
-                break;
-            }
-
-            m_pVPP->LockSurface(pOutSurface);
-
             // Run VPP
             sts = m_pVPP->Process(pInSurface, pOutSurface);
 
@@ -1327,16 +1310,9 @@ void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData
     outFrameData.rcClip.top    = 0;
     outFrameData.rcClip.bottom = (LONG)height - 1; // Height is not padded in output buffer
 
-    if (m_Config.bMod16Width)
-    {
-        outFrameData.rcClip = outFrameData.rcFull;
-    }
-    else
-    {
-        // Note that we always crop the height
-        outFrameData.rcClip.left  = pSurface->Info.CropX;
-        outFrameData.rcClip.right = pSurface->Info.CropW + pSurface->Info.CropX - 1;
-    }
+    // Note that we always crop the height
+    outFrameData.rcClip.left  = pSurface->Info.CropX;
+    outFrameData.rcClip.right = pSurface->Info.CropW + pSurface->Info.CropX - 1;
 
     // Offset output buffer's address for fastest SSE4.1 copy.
     // Page offset (12 lsb of addresses) sould be 2K apart from source buffer
@@ -1381,8 +1357,7 @@ void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData
 void CQuickSync::UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& frameData)
 {
     mfxFrameInfo& info = pSurface->Info;
-    DWORD alignedWidth = (m_Config.bMod16Width) ? MSDK_ALIGN16(info.CropW) : info.CropW;
-    PARtoDAR(info.AspectRatioW, info.AspectRatioH, alignedWidth, info.CropH,
+    PARtoDAR(info.AspectRatioW, info.AspectRatioH, info.CropW, info.CropH,
         frameData.dwPictAspectRatioX, frameData.dwPictAspectRatioY);
 }
 
@@ -1405,16 +1380,7 @@ void CQuickSync::FlushVPP()
 
     while (!m_bNeedToFlush)
     {
-        // Find output surface
-        mfxFrameSurface1* pOutSurface = m_pVPP->FindFreeSurface();
-        ASSERT(pOutSurface);
-        if (NULL == pOutSurface)
-        {
-            MSDK_TRACE("QsDecoder: Failed to find VPP surface!\n");
-            break;
-        }
-
-        m_pVPP->LockSurface(pOutSurface);
+        mfxFrameSurface1* pOutSurface = NULL;
 
         // Run VPP
         mfxStatus sts = m_pVPP->Process(NULL, pOutSurface);

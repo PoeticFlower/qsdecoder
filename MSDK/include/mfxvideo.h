@@ -4,7 +4,7 @@ INTEL CORPORATION PROPRIETARY INFORMATION
 This software is supplied under the terms of a license agreement or nondisclosure
 agreement with Intel Corporation and may not be copied or disclosed except in
 accordance with the terms of that agreement
-Copyright(c) 2007-2011 Intel Corporation. All Rights Reserved.
+Copyright(c) 2007-2012 Intel Corporation. All Rights Reserved.
 
 File Name: mfxvideo.h
 
@@ -15,7 +15,7 @@ File Name: mfxvideo.h
 
 /* This is the external include file for the Intel(R) Media Sofware Development Kit product */
 #define MFX_VERSION_MAJOR 1
-#define MFX_VERSION_MINOR 3
+#define MFX_VERSION_MINOR 4
 
 #ifdef _WIN32
     #define MFX_CDECL __cdecl

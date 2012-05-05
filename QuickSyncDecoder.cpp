@@ -141,9 +141,9 @@ mfxFrameSurface1* CQuickSyncDecoder::FindFreeSurface()
     {
         for (int i = 0; i < m_nRequiredFramesNum; ++i)
         {
-            if (!IsSurfaceLocked(&m_pFrameSurfaces[i]))
+            if (!IsSurfaceLocked(m_pFrameSurfaces + i))
             {
-                // Found free surface :)
+                // Found free surface
                 return m_pFrameSurfaces + i;
             }
         }
@@ -354,7 +354,7 @@ mfxStatus CQuickSyncDecoder::GetVideoParams(mfxVideoParam* pVideoParams)
     return m_pmfxDEC->GetVideoParam(pVideoParams);
 }
 
-mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurface1*& pFrameSurface)
+mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurface1*& pOutSurface)
 {
     MSDK_CHECK_POINTER(m_pmfxDEC, MFX_ERR_NOT_INITIALIZED);    
 
@@ -366,7 +366,7 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
     MSDK_CHECK_POINTER(pWorkSurface, MFX_ERR_NOT_ENOUGH_BUFFER);
     do
     {
-        sts = m_pmfxDEC->DecodeFrameAsync(pBS, pWorkSurface, &pFrameSurface, &syncp);
+        sts = m_pmfxDEC->DecodeFrameAsync(pBS, pWorkSurface, &pOutSurface, &syncp);
         // Need 1 more work surface
         if (MFX_ERR_MORE_SURFACE == sts)
         {
@@ -388,16 +388,25 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
             // Turn event to non signalled (locked)
             // The state will change to signalled after the worker thread has finished decoding
             m_AsyncDecodeInfo.lock.Lock();
-            m_AsyncDecodeInfo.pSurface = pFrameSurface;
+            m_AsyncDecodeInfo.pSurface = pOutSurface;
             m_AsyncDecodeInfo.syncPoint = syncp;
 
+            // The surface is locked from being reused in another Decode call
+            LockSurface(pOutSurface);
+
             PostThreadMessage(m_DecoderWorkerThreadId, TM_DECODE_FRAME, 0, 0);
-            pFrameSurface = NULL; // Return pFrameSurface only in sync mode
+            pOutSurface = NULL; // Return pOutSurface only in sync mode
         }
         else
         {
             // Wait for the asynch decoding to finish
             sts = m_mfxVideoSession->SyncOperation(syncp, 0xFFFF);
+
+            if (MFX_ERR_NONE == sts)
+            {
+                // The surface is locked from being reused in another Decode call
+                LockSurface(pOutSurface);
+            }
         }
     }
 
@@ -768,7 +777,6 @@ unsigned CQuickSyncDecoder::DecoderWorkerThreadMsgLoop()
             if (sts == MFX_ERR_NONE)
             {
                 ASSERT(m_OnDecodeComplete != NULL && m_Parent != NULL);
-                LockSurface(m_AsyncDecodeInfo.pSurface);
                 m_OnDecodeComplete(m_AsyncDecodeInfo.pSurface, m_Parent);
             }
 

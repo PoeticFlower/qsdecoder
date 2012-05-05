@@ -4,7 +4,7 @@ INTEL CORPORATION PROPRIETARY INFORMATION
 This software is supplied under the terms of a license agreement or nondisclosure
 agreement with Intel Corporation and may not be copied or disclosed except in
 accordance with the terms of that agreement
-Copyright(c) 2007-2011 Intel Corporation. All Rights Reserved.
+Copyright(c) 2007-2012 Intel Corporation. All Rights Reserved.
 
 File Name: mfxstructures.h
 
@@ -270,58 +270,69 @@ enum {
 
 /* CodecProfile, CodecLevel */
 enum {
-    MFX_PROFILE_UNKNOWN         =0,
-    MFX_LEVEL_UNKNOWN           =0,
+    MFX_PROFILE_UNKNOWN                     =0,
+    MFX_LEVEL_UNKNOWN                       =0,
 
     /* AVC Profiles & Levels */
-    MFX_PROFILE_AVC_BASELINE    =66,
-    MFX_PROFILE_AVC_MAIN        =77,
-    MFX_PROFILE_AVC_EXTENDED    =88,
-    MFX_PROFILE_AVC_HIGH        =100,
+    MFX_PROFILE_AVC_CONSTRAINT_SET0     = (0x100 << 0),
+    MFX_PROFILE_AVC_CONSTRAINT_SET1     = (0x100 << 1),
+    MFX_PROFILE_AVC_CONSTRAINT_SET2     = (0x100 << 2),
+    MFX_PROFILE_AVC_CONSTRAINT_SET3     = (0x100 << 3),
+    MFX_PROFILE_AVC_CONSTRAINT_SET4     = (0x100 << 4),
+    MFX_PROFILE_AVC_CONSTRAINT_SET5     = (0x100 << 5),
 
-    MFX_LEVEL_AVC_1             =10,
-    MFX_LEVEL_AVC_1b            =9,
-    MFX_LEVEL_AVC_11            =11,
-    MFX_LEVEL_AVC_12            =12,
-    MFX_LEVEL_AVC_13            =13,
-    MFX_LEVEL_AVC_2             =20,
-    MFX_LEVEL_AVC_21            =21,
-    MFX_LEVEL_AVC_22            =22,
-    MFX_LEVEL_AVC_3             =30,
-    MFX_LEVEL_AVC_31            =31,
-    MFX_LEVEL_AVC_32            =32,
-    MFX_LEVEL_AVC_4             =40,
-    MFX_LEVEL_AVC_41            =41,
-    MFX_LEVEL_AVC_42            =42,
-    MFX_LEVEL_AVC_5             =50,
-    MFX_LEVEL_AVC_51            =51,
+    MFX_PROFILE_AVC_BASELINE                =66,
+    MFX_PROFILE_AVC_MAIN                    =77,
+    MFX_PROFILE_AVC_EXTENDED                =88,
+    MFX_PROFILE_AVC_HIGH                    =100,
+    MFX_PROFILE_AVC_CONSTRAINED_BASELINE    =MFX_PROFILE_AVC_BASELINE + MFX_PROFILE_AVC_CONSTRAINT_SET1,
+    MFX_PROFILE_AVC_CONSTRAINED_HIGH        =MFX_PROFILE_AVC_HIGH     + MFX_PROFILE_AVC_CONSTRAINT_SET4
+                                                                      + MFX_PROFILE_AVC_CONSTRAINT_SET5,
+    MFX_PROFILE_AVC_PROGRESSIVE_HIGH        =MFX_PROFILE_AVC_HIGH     + MFX_PROFILE_AVC_CONSTRAINT_SET4,
+
+    MFX_LEVEL_AVC_1                         =10,
+    MFX_LEVEL_AVC_1b                        =9,
+    MFX_LEVEL_AVC_11                        =11,
+    MFX_LEVEL_AVC_12                        =12,
+    MFX_LEVEL_AVC_13                        =13,
+    MFX_LEVEL_AVC_2                         =20,
+    MFX_LEVEL_AVC_21                        =21,
+    MFX_LEVEL_AVC_22                        =22,
+    MFX_LEVEL_AVC_3                         =30,
+    MFX_LEVEL_AVC_31                        =31,
+    MFX_LEVEL_AVC_32                        =32,
+    MFX_LEVEL_AVC_4                         =40,
+    MFX_LEVEL_AVC_41                        =41,
+    MFX_LEVEL_AVC_42                        =42,
+    MFX_LEVEL_AVC_5                         =50,
+    MFX_LEVEL_AVC_51                        =51,
 
     /* MPEG-2 Profiles & Levels */
-    MFX_PROFILE_MPEG2_SIMPLE    =0x50,
-    MFX_PROFILE_MPEG2_MAIN      =0x40,
-    MFX_PROFILE_MPEG2_HIGH      =0x10,
+    MFX_PROFILE_MPEG2_SIMPLE                =0x50,
+    MFX_PROFILE_MPEG2_MAIN                  =0x40,
+    MFX_PROFILE_MPEG2_HIGH                  =0x10,
 
-    MFX_LEVEL_MPEG2_LOW         =0xA,
-    MFX_LEVEL_MPEG2_MAIN        =0x8,
-    MFX_LEVEL_MPEG2_HIGH        =0x4,
-    MFX_LEVEL_MPEG2_HIGH1440    =0x6,
+    MFX_LEVEL_MPEG2_LOW                     =0xA,
+    MFX_LEVEL_MPEG2_MAIN                    =0x8,
+    MFX_LEVEL_MPEG2_HIGH                    =0x4,
+    MFX_LEVEL_MPEG2_HIGH1440                =0x6,
 
     /* VC1 Profiles & Levels */
-    MFX_PROFILE_VC1_SIMPLE      =(0+1),
-    MFX_PROFILE_VC1_MAIN        =(4+1),
-    MFX_PROFILE_VC1_ADVANCED    =(12+1),
+    MFX_PROFILE_VC1_SIMPLE                  =(0+1),
+    MFX_PROFILE_VC1_MAIN                    =(4+1),
+    MFX_PROFILE_VC1_ADVANCED                =(12+1),
 
     /* VC1 levels for simple & main profiles */
-    MFX_LEVEL_VC1_LOW           =(0+1),
-    MFX_LEVEL_VC1_MEDIAN        =(2+1),
-    MFX_LEVEL_VC1_HIGH          =(4+1),
+    MFX_LEVEL_VC1_LOW                       =(0+1),
+    MFX_LEVEL_VC1_MEDIAN                    =(2+1),
+    MFX_LEVEL_VC1_HIGH                      =(4+1),
 
     /* VC1 levels for the advanced profile */
-    MFX_LEVEL_VC1_0             =(0x00+1),
-    MFX_LEVEL_VC1_1             =(0x01+1),
-    MFX_LEVEL_VC1_2             =(0x02+1),
-    MFX_LEVEL_VC1_3             =(0x03+1),
-    MFX_LEVEL_VC1_4             =(0x04+1)
+    MFX_LEVEL_VC1_0                         =(0x00+1),
+    MFX_LEVEL_VC1_1                         =(0x01+1),
+    MFX_LEVEL_VC1_2                         =(0x02+1),
+    MFX_LEVEL_VC1_3                         =(0x03+1),
+    MFX_LEVEL_VC1_4                         =(0x04+1)
 };
 
 /* GopOptFlag */
@@ -360,7 +371,8 @@ typedef struct {
     union {
         struct {    /* AVC */
             mfxU16      CAVLC;                  /* tri-state option */
-            mfxU16      reserved2[4];
+            mfxU16      reserved2[3];
+            mfxU16      ViewOutput;             /* tri-state option */
             mfxU16      NalHrdConformance;      /* tri-state option */  
             mfxU16      SingleSeiNalUnit;       /* tri-state option */
             mfxU16      VuiVclHrdParameters;    /* tri-state option */
@@ -594,7 +606,9 @@ enum {
 typedef enum {
     MFX_HANDLE_DIRECT3D_DEVICE_MANAGER9         =1,      /* IDirect3DDeviceManager9      */
     MFX_HANDLE_D3D9_DEVICE_MANAGER              = MFX_HANDLE_DIRECT3D_DEVICE_MANAGER9,
-    MFX_HANDLE_D3D11_DEVICE_AND_CONTEXT         = 2
+    MFX_HANDLE_D3D11_DEVICE_AND_CONTEXT         = 2,
+    MFX_HANDLE_D3D11_DEVICE                     = 3,
+    MFX_HANDLE_VA_DISPLAY                       = 4
 } mfxHandleType;
 
 typedef enum {

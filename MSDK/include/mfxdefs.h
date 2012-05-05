@@ -4,7 +4,7 @@ INTEL CORPORATION PROPRIETARY INFORMATION
 This software is supplied under the terms of a license agreement or nondisclosure
 agreement with Intel Corporation and may not be copied or disclosed except in
 accordance with the terms of that agreement
-Copyright(c) 2007-2011 Intel Corporation. All Rights Reserved.
+Copyright(c) 2007-2012 Intel Corporation. All Rights Reserved.
 
 File Name: mfxdefs.h
 
@@ -25,14 +25,21 @@ extern "C"
   #define __UINT64  unsigned long long
 #endif
 
+#define MFX_INFINITE 0xFFFFFFFF
+
 typedef unsigned char       mfxU8;
 typedef char                mfxI8;
 typedef short               mfxI16;
 typedef unsigned short      mfxU16;
 typedef unsigned int        mfxU32;
 typedef int                 mfxI32;
+#if defined( _WIN32 ) || defined ( _WIN64 )
 typedef unsigned long       mfxUL32;
 typedef long                mfxL32;
+#else
+typedef unsigned int        mfxUL32;
+typedef int                 mfxL32;
+#endif
 typedef float               mfxF32;
 typedef double              mfxF64;
 typedef __UINT64            mfxU64;

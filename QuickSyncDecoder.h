@@ -57,7 +57,7 @@ public:
         return InternalReset(pVideoParams, nPitch, true);     
     }
 
-    mfxStatus Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurface1*& pFrameSurface);
+    mfxStatus Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurface1*& pOutSurface);
     mfxStatus GetVideoParams(mfxVideoParam* pVideoParams);
     IDirect3DDeviceManager9* GetD3DDeviceManager()
     {

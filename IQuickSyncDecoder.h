@@ -110,7 +110,7 @@ struct CQsConfig
         struct
         {
             unsigned nOutputQueueLength     :  6; // use a minimum of 8 frame for more accurate frame rate calculations
-            bool     bMod16Width            :  1; // image width is always modulu 16
+            bool     bMod16Width            :  1; // deprecated
             bool     bEnableMultithreading  :  1; // enable worker threads for low latency decode (better performance, more power)
             bool     bTimeStampCorrection   :  1; // when true time stamp will be generated.
                                                   // when false -> DS filter will do this.
