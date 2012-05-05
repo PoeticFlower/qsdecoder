@@ -37,7 +37,7 @@ public:
     CQuickSyncVPP(bool bUseD3dAlloc, MFXFrameAllocator* pFrameAllocator);
     virtual ~CQuickSyncVPP();
     mfxStatus Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxVideoParam* pDecVideoParams, mfxFrameSurface1* pSurface);
-    mfxStatus Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1* pOutSurface);
+    mfxStatus Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*& pOutSurface);
     mfxFrameSurface1* FindFreeSurface();
 
     __forceinline void LockSurface(mfxFrameSurface1* pSurface)

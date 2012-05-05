@@ -184,17 +184,29 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     return sts;
 }
 
-mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1* pOutSurface)
+mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*& pOutSurface)
 {
     CQsAutoLock lock(&m_csLock);
-    MSDK_CHECK_POINTER(pOutSurface, MFX_ERR_NULL_PTR);
     mfxStatus sts, rc;
     mfxSyncPoint syncp;
+
+    // Find available output surface
+    pOutSurface = FindFreeSurface();
+    MSDK_CHECK_POINTER(pOutSurface, MFX_ERR_NOT_ENOUGH_BUFFER);
+
+    if (m_Config.bVppEnableDeinterlacing && pInSurface != NULL)
+    {
+        mfxU16& picStruct = pInSurface->Info.PicStruct;
+        if (0 != (picStruct & MFX_PICSTRUCT_PROGRESSIVE) && picStruct != MFX_PICSTRUCT_PROGRESSIVE)
+        {
+            picStruct &= ~MFX_PICSTRUCT_PROGRESSIVE;
+        }
+    }
 
     do
     {
         sts = m_pVPP->RunFrameVPPAsync(pInSurface, pOutSurface, NULL, &syncp);
-        
+
         if (MFX_WRN_DEVICE_BUSY == sts)
         {
             MSDK_TRACE("QsVPP: MFX_WRN_DEVICE_BUSY\n");
@@ -213,6 +225,10 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
         if (sts < 0)
         {
             rc = sts;
+        }
+        else
+        {
+            LockSurface(pOutSurface);
         }
     }
 
@@ -233,9 +249,9 @@ mfxFrameSurface1* CQuickSyncVPP::FindFreeSurface()
     {
         for (int i = 0; i < m_nRequiredFramesNum; ++i)
         {
-            if (!IsSurfaceLocked(&m_pFrameSurfaces[i]))
+            if (!IsSurfaceLocked(m_pFrameSurfaces + i))
             {
-                // Found free surface :)
+                // Found free surface
                 return m_pFrameSurfaces + i;
             }
         }
