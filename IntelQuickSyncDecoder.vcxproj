@@ -25,6 +25,12 @@
     <ProjectName>IntelQuickSyncDecoder</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration" Condition="'$(VisualStudioVersion)' == '11.0'">
+    <PlatformToolset>v110_xp</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(VisualStudioVersion)' == '12.0'">
+    <PlatformToolset>v120_xp</PlatformToolset>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -62,11 +68,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</OutDir>
+    <OutDir>$(SolutionDir)bin_$(PlatformName)d\</OutDir>
     <IncludePath>$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <LinkIncremental>false</LinkIncremental>
-    <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
+    <IntDir>$(SolutionDir)bin_$(PlatformName)d\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -75,8 +81,8 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IncludePath>$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
-    <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</OutDir>
-    <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
+    <OutDir>$(SolutionDir)bin_$(PlatformName)d\</OutDir>
+    <IntDir>$(SolutionDir)bin_$(PlatformName)d\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -86,16 +92,16 @@
     <IncludePath>$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\</OutDir>
-    <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
+    <OutDir>$(SolutionDir)bin_$(PlatformName)\$(ProjectName)\</OutDir>
+    <IntDir>$(SolutionDir)bin_$(PlatformName)\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
     <IgnoreImportLibrary>false</IgnoreImportLibrary>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\</OutDir>
-    <IntDir>$(SolutionDir)obj\$(Configuration)_$(PlatformName)_VC2010\$(ProjectName)\</IntDir>
+    <OutDir>$(SolutionDir)bin_$(PlatformName)\$(ProjectName)\</OutDir>
+    <IntDir>$(SolutionDir)bin_$(PlatformName)\$(ProjectName)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
     <IncludePath>$(IncludePath)</IncludePath>
     <LibraryPath>MSDK\lib\$(PlatformName);$(LibraryPath)</LibraryPath>
@@ -112,6 +118,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MinimalRebuild>false</MinimalRebuild>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -121,7 +128,6 @@
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <OutputFile>$(SolutionDir)bin\$(TargetName)$(TargetExt)</OutputFile>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
     </Link>
     <ResourceCompile>
@@ -150,7 +156,6 @@
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;libmfx.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib\x64;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <OutputFile>$(SolutionDir)bin\$(TargetName)$(TargetExt)</OutputFile>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
     </Link>
     <ResourceCompile>
@@ -172,9 +177,9 @@
       <MinimalRebuild>false</MinimalRebuild>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <TreatWarningAsError>true</TreatWarningAsError>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OmitFramePointers>true</OmitFramePointers>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -183,7 +188,6 @@
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <OptimizeReferences>true</OptimizeReferences>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
-      <OutputFile>$(SolutionDir)bin\$(TargetName)$(TargetExt)</OutputFile>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
       <IgnoreSpecificDefaultLibraries>LIBCMTD.LIB</IgnoreSpecificDefaultLibraries>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -191,6 +195,12 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
     </ResourceCompile>
+    <PostBuildEvent>
+      <Command>copy "$(TargetDir)\$(TargetName)$(TargetExt)" "$(OutDir).."</Command>
+    </PostBuildEvent>
+    <PostBuildEvent>
+      <Message>Copy .dll</Message>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -209,9 +219,7 @@
       <StringPooling>true</StringPooling>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AssemblerOutput>NoListing</AssemblerOutput>
-      <TreatWarningAsError>true</TreatWarningAsError>
       <OmitFramePointers>true</OmitFramePointers>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -221,7 +229,6 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
-      <OutputFile>$(SolutionDir)bin\$(TargetName)$(TargetExt)</OutputFile>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
       <IgnoreSpecificDefaultLibraries>LIBCMTD.LIB</IgnoreSpecificDefaultLibraries>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -229,6 +236,12 @@
     <ResourceCompile>
       <Culture>0x0409</Culture>
     </ResourceCompile>
+    <PostBuildEvent>
+      <Command>copy "$(TargetDir)\$(TargetName)$(TargetExt)" "$(OutDir).."</Command>
+    </PostBuildEvent>
+    <PostBuildEvent>
+      <Message>Copy .dll</Message>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="IntelQuickSyncDecoder.def" />
