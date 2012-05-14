@@ -97,6 +97,8 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     m_pVideoParams->AsyncDepth = 2;
     m_pVideoParams->vpp.In  = pSurface->Info;
     m_pVideoParams->vpp.Out = pSurface->Info;
+    m_pVideoParams->vpp.In.AspectRatioH = m_pVideoParams->vpp.In.AspectRatioW = 0;
+    m_pVideoParams->vpp.Out.AspectRatioH = m_pVideoParams->vpp.Out.AspectRatioW = 0;
     m_pVideoParams->IOPattern = pDecVideoParams->IOPattern;
 
 //
