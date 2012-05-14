@@ -1182,10 +1182,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                 m_pVPP->UnlockSurface(pOutSurface);
                 pOutSurface = pInSurface;
             }
-
-            // Copy AR info - this wasn't preserved in the VPP process...
-            pOutSurface->Info.AspectRatioH = pInSurface->Info.AspectRatioH;
-            pOutSurface->Info.AspectRatioW = pInSurface->Info.AspectRatioW;
         }
 
         TQsQueueItem item;
