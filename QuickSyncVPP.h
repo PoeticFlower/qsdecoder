@@ -36,7 +36,9 @@ class CQuickSyncVPP
 public:
     CQuickSyncVPP(bool bUseD3dAlloc, MFXFrameAllocator* pFrameAllocator);
     virtual ~CQuickSyncVPP();
-    mfxStatus Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxVideoParam* pDecVideoParams, mfxFrameSurface1* pSurface);
+    mfxStatus Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxFrameSurface1* pSurface);
+    void Reset() { m_bNeedReset = true; }
+    bool NeedReset() { return m_bNeedReset; }
     mfxStatus Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*& pOutSurface);
     mfxFrameSurface1* FindFreeSurface();
 
@@ -71,17 +73,17 @@ public:
 
 protected:
     void Close();
-    mfxStatus InitFrameAllocator(mfxVideoParam* pVideoParams);
+    mfxStatus InitFrameAllocator();
     mfxStatus FreeFrameAllocator();
-    void Flush();
 
     MFXVideoVPP*     m_pVPP;
-    mfxVideoParam*   m_pVideoParams;
+    mfxVideoParam    m_VppVideoParams;
 
     MFXVideoSession* m_pVideoSession;
     mfxVersion       m_ApiVersion;
     CQsConfig        m_Config;
     mfxU32           m_nPitch;
+    bool             m_bNeedReset;
 
     // Allocator
     MFXFrameAllocator*    m_pFrameAllocator;
