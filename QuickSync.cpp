@@ -637,8 +637,10 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             MSDK_TRACE("QsDecoder: Decode MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
 
             // Flush existing frames
-            // Will also destroy the VPP
             Flush(true);
+
+            // Destroy VPP object
+            MSDK_SAFE_DELETE(m_pVPP);
 
             // Retrieve new parameters
             mfxVideoParam VideoParams;
@@ -830,7 +832,6 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     // All data has been flushed
     m_bNeedToFlush = false;
 
-    MSDK_SAFE_DELETE(m_pVPP);
     MSDK_TRACE("QsDecoder: Flush ended\n");
     return hr;
 }
@@ -899,7 +900,17 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
     if (m_pDecoder)
     {
         m_TimeManager.Reset();
-        MSDK_SAFE_DELETE(m_pVPP);
+        if (m_pVPP)
+        {
+            if (m_DecVideoParams.mfx.CodecId == MFX_CODEC_VC1 && m_DecVideoParams.mfx.CodecProfile == MFX_PROFILE_VC1_ADVANCED)
+            {
+                MSDK_SAFE_DELETE(m_pVPP);
+            }
+            else
+            {
+                m_pVPP->Reset();
+            }
+        }
 
         sts = m_pDecoder->Reset(&m_DecVideoParams, m_nPitch);
         if (sts != MFX_ERR_NONE)
@@ -1147,14 +1158,19 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
     if (m_Config.bEnableVideoProcessing)
     {
         // Init VPP if needed
-        if (!m_pVPP && !m_bNeedToFlush && IsVppNeeded(pOutSurface->Info.PicStruct))
+        if ((!m_pVPP && !m_bNeedToFlush && IsVppNeeded(pOutSurface->Info.PicStruct)) || 
+            (m_pVPP && m_pVPP->NeedReset()))
         {
-            m_pVPP = new CQuickSyncVPP(m_pDecoder->IsD3DAlloc(), m_pDecoder->GetFrameAllocator());
-            mfxStatus sts = m_pVPP->Reset(m_Config, m_pDecoder->GetSession(), &m_DecVideoParams, pOutSurface);
-            
-            if (sts < 0 || MFX_WRN_VALUE_NOT_CHANGED == sts)
+            if (!m_pVPP)
             {
-                // Change config to disbale VPP
+                m_pVPP = new CQuickSyncVPP(m_pDecoder->IsD3DAlloc(), m_pDecoder->GetFrameAllocator());
+            }
+    
+            mfxStatus sts = m_pVPP->Reset(m_Config, m_pDecoder->GetSession(), pOutSurface);
+            
+            if (sts < 0)
+            {
+                // Change config to disable VPP from being created for this video 
                 m_Config.bEnableVideoProcessing = false;
                 MSDK_SAFE_DELETE(m_pVPP);
             }
@@ -1185,9 +1201,9 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
         }
 
         TQsQueueItem item;
-        while (!m_FreeFramesPool.PopFront(item, 5))
+        for (int tries = 1000; !m_FreeFramesPool.PopFront(item, 5); --tries)
         {
-            if (m_bNeedToFlush)
+            if (m_bNeedToFlush || tries == 0)
             {
                 if (m_pVPP)
                 {

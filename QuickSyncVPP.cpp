@@ -34,22 +34,24 @@
 
 CQuickSyncVPP::CQuickSyncVPP(bool bUseD3dAlloc, MFXFrameAllocator* pFrameAllocator) :
     m_pVPP(NULL),
-    m_pVideoParams(NULL),
     m_pVideoSession(NULL),
+    m_nPitch(0),
+    m_bNeedReset(true),
     m_pFrameAllocator(pFrameAllocator),
     m_pFrameSurfaces(NULL),
     m_bUseD3DAlloc(bUseD3dAlloc)
 {
     MSDK_ZERO_VAR(m_ApiVersion);
     MSDK_ZERO_VAR(m_Config);
+    MSDK_ZERO_VAR(m_VppVideoParams);
     MSDK_ZERO_MEMORY((void*)&m_LockedSurfaces, sizeof(m_LockedSurfaces));
 }
 
 CQuickSyncVPP::~CQuickSyncVPP()
 {
+    ASSERT(this != NULL);
     CQsAutoLock lock(&m_csLock);
     Close();
-    m_pFrameAllocator = NULL;
 }
 
 void CQuickSyncVPP::Close()
@@ -57,49 +59,43 @@ void CQuickSyncVPP::Close()
     if (!m_pVPP)
         return;
 
-    // Flush
-    Flush();
+    MSDK_SAFE_DELETE(m_pVPP);
 
-    m_pVPP->Close();
-    m_pVPP = NULL;
     FreeFrameAllocator();
     m_pVideoSession = NULL;
-    MSDK_SAFE_DELETE(m_pVideoParams);
 }
 
-void CQuickSyncVPP::Flush()
+mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxFrameSurface1* pSurface)
 {
-}
-
-mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxVideoParam* pDecVideoParams, mfxFrameSurface1* pSurface)
-{
+    ASSERT(this != NULL);
     CQsAutoLock lock(&m_csLock);
 
-    MSDK_CHECK_POINTER(pDecVideoParams, MFX_ERR_NULL_PTR);
-    MSDK_CHECK_POINTER(pVideoSession, MFX_ERR_NULL_PTR);
-
     mfxStatus sts;
-    Close();
+    MSDK_CHECK_POINTER(pVideoSession, MFX_ERR_NULL_PTR);
+    MSDK_CHECK_POINTER(m_pFrameAllocator, MFX_ERR_NULL_PTR);
+
+    // Check if VPP is enabled
+    if (!config.bEnableVideoProcessing ||
+        (!config.bVppEnableDeinterlacing && config.nVppDenoiseStrength == 0 && config.nVppDetailStrength == 0))
+    {
+        Close();
+        return MFX_ERR_INVALID_VIDEO_PARAM;
+    }
 
     m_nPitch = pSurface->Data.Pitch;
     m_Config = config;
 
-    // Check if we need to do something
-    if (!m_Config.bEnableVideoProcessing ||
-        (!m_Config.bVppEnableDeinterlacing && m_Config.nVppDenoiseStrength == 0 && m_Config.nVppDetailStrength == 0))
-        return MFX_WRN_VALUE_NOT_CHANGED;
-
     m_pVideoSession = pVideoSession;
 
     // Create VPP video params
-    m_pVideoParams = new mfxVideoParam;
-    MSDK_ZERO_MEMORY(m_pVideoParams, sizeof(mfxVideoParam));
-    m_pVideoParams->AsyncDepth = 2;
-    m_pVideoParams->vpp.In  = pSurface->Info;
-    m_pVideoParams->vpp.Out = pSurface->Info;
-    m_pVideoParams->vpp.In.AspectRatioH = m_pVideoParams->vpp.In.AspectRatioW = 0;
-    m_pVideoParams->vpp.Out.AspectRatioH = m_pVideoParams->vpp.Out.AspectRatioW = 0;
-    m_pVideoParams->IOPattern = pDecVideoParams->IOPattern;
+    m_VppVideoParams.AsyncDepth = 2;
+    m_VppVideoParams.vpp.In  = pSurface->Info;
+    m_VppVideoParams.vpp.Out = pSurface->Info;
+    m_VppVideoParams.vpp.In.AspectRatioH = m_VppVideoParams.vpp.In.AspectRatioW = 0;
+    m_VppVideoParams.vpp.Out.AspectRatioH = m_VppVideoParams.vpp.Out.AspectRatioW = 0;
+    m_VppVideoParams.IOPattern = (m_bUseD3DAlloc) ? 
+        MFX_IOPATTERN_OUT_VIDEO_MEMORY | MFX_IOPATTERN_IN_VIDEO_MEMORY : 
+        MFX_IOPATTERN_OUT_SYSTEM_MEMORY | MFX_IOPATTERN_IN_SYSTEM_MEMORY;
 
 //
 // Setup output fields
@@ -109,10 +105,10 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     {
         if (pSurface->Info.PicStruct != MFX_PICSTRUCT_PROGRESSIVE)
         {
-            m_pVideoParams->vpp.Out.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
+            m_VppVideoParams.vpp.Out.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
             if (m_Config.bVppEnableFullRateDI)
             {
-                m_pVideoParams->vpp.Out.FrameRateExtN *= 2;
+                m_VppVideoParams.vpp.Out.FrameRateExtN *= 2;
             }
         }
     }
@@ -173,21 +169,45 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     if (duCount > 0)  extBuffers.push_back((mfxExtBuffer*)&du);
     
 
-    m_pVideoParams->NumExtParam = (mfxU16)extBuffers.size();
-    m_pVideoParams->ExtParam = &extBuffers.front();
+    m_VppVideoParams.NumExtParam = (mfxU16)extBuffers.size();
+    m_VppVideoParams.ExtParam = &extBuffers.front();
 
+    m_bNeedReset = false;
+
+    // Soft reset
+    if (m_pVPP)
+    {
+        // Setup allocator
+        InitFrameAllocator();
+
+        // Init
+        sts = m_pVPP->Reset(&m_VppVideoParams);
+        MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
+        MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
+        if (sts == MFX_ERR_NONE)
+        {
+            return MFX_ERR_NONE;
+        }
+
+        Close();
+    }
+    
+    // Hard reset
     m_pVPP = new MFXVideoVPP(*pVideoSession);
 
     // Setup allocator
-    InitFrameAllocator(m_pVideoParams);
+    InitFrameAllocator();
 
     // Init
-    sts = m_pVPP->Init(m_pVideoParams);
+    sts = m_pVPP->Init(&m_VppVideoParams);
+    
+
     return sts;
 }
 
 mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*& pOutSurface)
 {
+    ASSERT(this != NULL);
     CQsAutoLock lock(&m_csLock);
     mfxStatus sts, rc;
     mfxSyncPoint syncp;
@@ -266,7 +286,7 @@ mfxFrameSurface1* CQuickSyncVPP::FindFreeSurface()
     return NULL;
 }
 
-mfxStatus CQuickSyncVPP::InitFrameAllocator(mfxVideoParam* pVideoParams)
+mfxStatus CQuickSyncVPP::InitFrameAllocator()
 {
     mfxStatus sts = MFX_ERR_NONE;
     MSDK_CHECK_POINTER(m_pFrameAllocator, MFX_ERR_NULL_PTR);
@@ -274,11 +294,20 @@ mfxStatus CQuickSyncVPP::InitFrameAllocator(mfxVideoParam* pVideoParams)
     mfxFrameAllocRequest allocRequest[2];
     MSDK_ZERO_VAR(allocRequest);
 
-    sts = m_pVPP->QueryIOSurf(m_pVideoParams, allocRequest);
+    sts = m_pVPP->QueryIOSurf(&m_VppVideoParams, allocRequest);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
     MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
       
+    // Check if existing allocation is OK
+    if (m_pFrameSurfaces != NULL && allocRequest[1].NumFrameSuggested == m_nRequiredFramesNum &&
+        allocRequest[1].Info.Width == m_pFrameSurfaces[0].Info.Width &&
+        allocRequest[1].Info.Height == m_pFrameSurfaces[0].Info.Height && 
+        m_pFrameSurfaces[0].Data.Pitch == m_nPitch)
+    {
+        return MFX_ERR_NONE;
+    }
+
     // Decide memory type
     allocRequest[1].Type = MFX_MEMTYPE_EXTERNAL_FRAME | MFX_MEMTYPE_FROM_VPPOUT;
     allocRequest[1].Type |= (m_bUseD3DAlloc) ?
@@ -303,7 +332,7 @@ mfxStatus CQuickSyncVPP::InitFrameAllocator(mfxVideoParam* pVideoParams)
     for (mfxU32 i = 0; i < m_nRequiredFramesNum; ++i)
     {
         // Copy frame info
-        memcpy(&(m_pFrameSurfaces[i].Info), &pVideoParams->vpp.Out, sizeof(mfxFrameInfo));
+        memcpy(&(m_pFrameSurfaces[i].Info), &m_VppVideoParams.vpp.Out, sizeof(mfxFrameInfo));
 
         // Save pointer to allocator specific surface object (mid)
         m_pFrameSurfaces[i].Data.MemId  = m_AllocResponse.mids[i];
