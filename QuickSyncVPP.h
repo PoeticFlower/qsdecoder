@@ -37,11 +37,12 @@ public:
     CQuickSyncVPP(bool bUseD3dAlloc, MFXFrameAllocator* pFrameAllocator);
     virtual ~CQuickSyncVPP();
     mfxStatus Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxFrameSurface1* pSurface);
-    void Reset() { m_bNeedReset = true; }
+    void Reset() { ASSERT(this != NULL); m_bNeedReset = true; }
     bool NeedReset() { return m_bNeedReset; }
     mfxStatus Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*& pOutSurface);
+    mfxFrameSurface1* FlushFrame();
     mfxFrameSurface1* FindFreeSurface();
-
+    void EnableDI(bool bEnable);
     __forceinline void LockSurface(mfxFrameSurface1* pSurface)
     {
         size_t i = pSurface - m_pFrameSurfaces;
@@ -55,8 +56,8 @@ public:
 
     __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
     {
+        ASSERT(pSurface != NULL);
         size_t i = pSurface - m_pFrameSurfaces;
-        ASSERT(i < m_nRequiredFramesNum);
 
         if (i < m_nRequiredFramesNum)
         {
@@ -84,7 +85,7 @@ protected:
     CQsConfig        m_Config;
     mfxU32           m_nPitch;
     bool             m_bNeedReset;
-
+    bool             m_bEnableDI;
     // Allocator
     MFXFrameAllocator*    m_pFrameAllocator;
     mfxFrameSurface1*     m_pFrameSurfaces;

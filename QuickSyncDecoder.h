@@ -127,8 +127,8 @@ public:
 
     __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
     {
+        ASSERT(pSurface != NULL);
         size_t i = pSurface - m_pFrameSurfaces;
-        ASSERT(i < m_nRequiredFramesNum);
 
         if (i < m_nRequiredFramesNum)
         {

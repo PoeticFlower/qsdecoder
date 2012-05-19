@@ -297,6 +297,23 @@ public:
         return bSuccess;
     }
 
+    void SetCapacity(size_t capacity)
+    {
+        EnterCriticalSection(&m_csBufferLock);
+        if (capacity < m_Capacity)
+            return;
+
+        T* pNewBuffer = new T[capacity];
+        for (size_t i = 0; i < m_Capacity; ++i)
+        {
+            pNewBuffer[i] = m_Buffer[i];
+        }
+        
+        delete[] m_Buffer;
+        m_Buffer = pNewBuffer;
+        LeaveCriticalSection(&m_csBufferLock);
+    }
+
 private:
     T*                 m_Buffer;           // Array holding the FIFO items
     const size_t       m_Capacity;         // Max size
