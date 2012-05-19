@@ -37,14 +37,19 @@ CQuickSyncVPP::CQuickSyncVPP(bool bUseD3dAlloc, MFXFrameAllocator* pFrameAllocat
     m_pVideoSession(NULL),
     m_nPitch(0),
     m_bNeedReset(true),
+    m_bEnableDI(true),
     m_pFrameAllocator(pFrameAllocator),
     m_pFrameSurfaces(NULL),
+    m_nRequiredFramesNum(0),
     m_bUseD3DAlloc(bUseD3dAlloc)
 {
+    MSDK_TRACE("QsVPP: VPP created\n");
+
     MSDK_ZERO_VAR(m_ApiVersion);
     MSDK_ZERO_VAR(m_Config);
     MSDK_ZERO_VAR(m_VppVideoParams);
     MSDK_ZERO_MEMORY((void*)&m_LockedSurfaces, sizeof(m_LockedSurfaces));
+    MSDK_ZERO_VAR(m_AllocResponse);
 }
 
 CQuickSyncVPP::~CQuickSyncVPP()
@@ -52,12 +57,15 @@ CQuickSyncVPP::~CQuickSyncVPP()
     ASSERT(this != NULL);
     CQsAutoLock lock(&m_csLock);
     Close();
+    MSDK_TRACE("QsVPP: VPP destroyed\n");
 }
 
 void CQuickSyncVPP::Close()
 {
     if (!m_pVPP)
         return;
+
+    MSDK_TRACE("QsVPP: VPP closed\n");
 
     MSDK_SAFE_DELETE(m_pVPP);
 
@@ -67,6 +75,8 @@ void CQuickSyncVPP::Close()
 
 mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoSession, mfxFrameSurface1* pSurface)
 {
+    MSDK_TRACE("QsVPP: VPP reset\n");
+
     ASSERT(this != NULL);
     CQsAutoLock lock(&m_csLock);
 
@@ -76,7 +86,7 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
 
     // Check if VPP is enabled
     if (!config.bEnableVideoProcessing ||
-        (!config.bVppEnableDeinterlacing && config.nVppDenoiseStrength == 0 && config.nVppDetailStrength == 0))
+        ((!config.bVppEnableDeinterlacing || !m_bEnableDI) && config.nVppDenoiseStrength == 0 && config.nVppDetailStrength == 0))
     {
         Close();
         return MFX_ERR_INVALID_VIDEO_PARAM;
@@ -101,7 +111,7 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
 // Setup output fields
 //
     // Enable auto-deinterlacing by forcing output frames to be progressive
-    if (m_Config.bVppEnableDeinterlacing)
+    if (m_Config.bVppEnableDeinterlacing && m_bEnableDI)
     {
         if (pSurface->Info.PicStruct != MFX_PICSTRUCT_PROGRESSIVE)
         {
@@ -111,6 +121,12 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
                 m_VppVideoParams.vpp.Out.FrameRateExtN *= 2;
             }
         }
+    }
+    else
+    {
+        // Disable DI
+        m_VppVideoParams.vpp.In.PicStruct  = MFX_PICSTRUCT_PROGRESSIVE;
+        m_VppVideoParams.vpp.Out.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
     }
 
     std::vector<mfxExtBuffer*> extBuffers;
@@ -167,12 +183,17 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
 
     if (dnuCount > 0) extBuffers.push_back((mfxExtBuffer*)&dnu);
     if (duCount > 0)  extBuffers.push_back((mfxExtBuffer*)&du);
-    
 
     m_VppVideoParams.NumExtParam = (mfxU16)extBuffers.size();
     m_VppVideoParams.ExtParam = &extBuffers.front();
 
     m_bNeedReset = false;
+    
+    // Flush old frames
+    while (NULL != FlushFrame())
+    {
+    }
+
 
     // Soft reset
     if (m_pVPP)
@@ -188,8 +209,13 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
         {
             return MFX_ERR_NONE;
         }
-
-        Close();
+        else
+        {
+            m_pVPP->Close();
+            sts = m_pVPP->Init(&m_VppVideoParams);
+        }
+        
+        return sts;
     }
     
     // Hard reset
@@ -200,8 +226,6 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
 
     // Init
     sts = m_pVPP->Init(&m_VppVideoParams);
-    
-
     return sts;
 }
 
@@ -241,7 +265,10 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
     if (MFX_ERR_NONE == sts || MFX_ERR_MORE_SURFACE == sts)
     {
         // Wait for the asynch decoding to finish
-        sts = m_pVideoSession->SyncOperation(syncp, 0xFFFF);
+        while (MFX_WRN_IN_EXECUTION == (sts = m_pVideoSession->SyncOperation(syncp, 0xFFFF)))
+        {
+            MSDK_TRACE("QsVPP: MFX_WRN_IN_EXECUTION\n");
+        }
 
         // Some error has occurred
         if (sts < 0)
@@ -259,6 +286,7 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
 
 mfxFrameSurface1* CQuickSyncVPP::FindFreeSurface()
 {
+    ASSERT(this != NULL);
     CQsAutoLock lock(&m_csLock);
 
     MSDK_CHECK_POINTER(m_pFrameSurfaces, NULL);
@@ -300,12 +328,16 @@ mfxStatus CQuickSyncVPP::InitFrameAllocator()
     MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
       
     // Check if existing allocation is OK
-    if (m_pFrameSurfaces != NULL && allocRequest[1].NumFrameSuggested == m_nRequiredFramesNum &&
+    if (m_pFrameSurfaces != NULL && allocRequest[1].NumFrameSuggested <= m_nRequiredFramesNum &&
         allocRequest[1].Info.Width == m_pFrameSurfaces[0].Info.Width &&
         allocRequest[1].Info.Height == m_pFrameSurfaces[0].Info.Height && 
         m_pFrameSurfaces[0].Data.Pitch == m_nPitch)
     {
-        return MFX_ERR_NONE;
+        goto done;
+    }
+    else
+    {
+        FreeFrameAllocator();
     }
 
     // Decide memory type
@@ -326,6 +358,9 @@ mfxStatus CQuickSyncVPP::InitFrameAllocator()
     ASSERT(m_nRequiredFramesNum == allocRequest[1].NumFrameSuggested);
     m_pFrameSurfaces = new mfxFrameSurface1[m_nRequiredFramesNum];
     MSDK_CHECK_POINTER(m_pFrameSurfaces, MFX_ERR_MEMORY_ALLOC);
+
+done:
+    MSDK_ZERO_MEMORY((void*)&m_LockedSurfaces, sizeof(m_LockedSurfaces));
     MSDK_ZERO_MEMORY(m_pFrameSurfaces, sizeof(mfxFrameSurface1) * m_nRequiredFramesNum);
 
     // Allocate decoder work & output surfaces
@@ -345,7 +380,7 @@ mfxStatus CQuickSyncVPP::InitFrameAllocator()
 mfxStatus CQuickSyncVPP::FreeFrameAllocator()
 {
     mfxStatus sts = MFX_ERR_NONE;
-    if (m_pFrameAllocator)
+    if (m_pFrameAllocator && m_nRequiredFramesNum)
     {
         sts = m_pFrameAllocator->Free(m_pFrameAllocator->pthis, &m_AllocResponse);
         MSDK_ZERO_VAR(m_AllocResponse);
@@ -354,4 +389,22 @@ mfxStatus CQuickSyncVPP::FreeFrameAllocator()
     m_nRequiredFramesNum = 0;
     MSDK_SAFE_DELETE_ARRAY(m_pFrameSurfaces);
     return MFX_ERR_NONE;
+}
+
+void CQuickSyncVPP::EnableDI(bool bEnable)
+{
+    if (m_bEnableDI == bEnable)
+        return;
+
+    m_bEnableDI = bEnable;
+    m_bNeedReset = true;
+}
+
+mfxFrameSurface1* CQuickSyncVPP::FlushFrame()
+{
+    mfxFrameSurface1* pOutSurface = NULL;
+
+    // Run VPP
+    mfxStatus sts = Process(NULL, pOutSurface);
+    return (MFX_ERR_NONE == sts || MFX_ERR_MORE_SURFACE == sts) ? pOutSurface : NULL;
 }
