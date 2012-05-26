@@ -84,6 +84,12 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     MSDK_CHECK_POINTER(pVideoSession, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(m_pFrameAllocator, MFX_ERR_NULL_PTR);
 
+    if (config.bVppEnableForcedDeinterlacing)
+    {
+        m_bEnableDI = true;
+        pSurface->Info.PicStruct = (mfxU16)((config.bVppForcedTff) ? MFX_PICSTRUCT_FIELD_TFF : MFX_PICSTRUCT_FIELD_BFF);
+    }
+
     // Check if VPP is enabled
     if (!config.bEnableVideoProcessing ||
         ((!config.bVppEnableDeinterlacing || !m_bEnableDI) && config.nVppDenoiseStrength == 0 && config.nVppDetailStrength == 0))
@@ -240,6 +246,12 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
     pOutSurface = FindFreeSurface();
     MSDK_CHECK_POINTER(pOutSurface, MFX_ERR_NOT_ENOUGH_BUFFER);
 
+    // Force interlaced flags
+    if (m_Config.bVppEnableForcedDeinterlacing && pInSurface != NULL)
+    {
+        pInSurface->Info.PicStruct = (mfxU16)((m_Config.bVppForcedTff) ? MFX_PICSTRUCT_FIELD_TFF : MFX_PICSTRUCT_FIELD_BFF);
+    }
+
     if (m_Config.bVppEnableDeinterlacing && pInSurface != NULL)
     {
         mfxU16& picStruct = pInSurface->Info.PicStruct;
@@ -393,6 +405,7 @@ mfxStatus CQuickSyncVPP::FreeFrameAllocator()
 
 void CQuickSyncVPP::EnableDI(bool bEnable)
 {
+    bEnable  = bEnable || m_Config.bVppEnableForcedDeinterlacing;
     if (m_bEnableDI == bEnable)
         return;
 

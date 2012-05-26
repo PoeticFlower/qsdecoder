@@ -92,16 +92,18 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableMtCopy         = m_Config.bEnableMultithreading;
 
     // For testing purposes only - menus are not handled well
-    //m_Config.bEnableSwEmulation  = true;
+//    m_Config.bEnableSwEmulation  = true;
 
     // Currently not working well - menu decoding :(
-    //m_Config.bEnableDvdDecoding = true;
+//    m_Config.bEnableDvdDecoding = true;
 
     // VPP
     m_Config.bEnableVideoProcessing  = true;
     m_Config.bVppEnableDeinterlacing = true;
     m_Config.bVppEnableFullRateDI    = true;
-    m_Config.nVppDetailStrength      = 32; // 0-64
+    m_Config.bVppEnableDITimeStampsInterpolation = true;
+//    m_Config.bVppEnableForcedDeinterlacing = true;
+//    m_Config.nVppDetailStrength      = 32; // 0-64
 //    m_Config.nVppDenoiseStrength     = 16; // 0-64
 
     m_OK = (sts == MFX_ERR_NONE);
@@ -462,11 +464,16 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     // Video processing
     if (m_Config.bEnableVideoProcessing)
     {
-        // DI doesn't like changing the time stamps
-        if (m_Config.bVppEnableDeinterlacing)
+        // If forced DI is enabled, DI is enabled.
+        if (m_Config.bVppEnableForcedDeinterlacing)
         {
-//            m_Config.bTimeStampCorrection = false;
+            m_Config.bVppEnableDeinterlacing = true;
         }
+    }
+    // Make sure all VPP features are disabled
+    else
+    {
+        m_Config.vpp = 0;
     }
 
     // Create worker thread
@@ -492,7 +499,10 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     {
         m_pDecoder->SetConfig(m_Config);
         size_t surfaceCount = max(8, m_Config.nOutputQueueLength) + DECODE_QUEUE_LENGTH;
-        if (m_Config.bVppEnableDeinterlacing) surfaceCount += 5;
+        if (m_Config.bVppEnableDeinterlacing)
+        {
+            surfaceCount += 5;
+        }
 
         m_pDecoder->SetAuxFramesCount(surfaceCount);
     }
@@ -1150,9 +1160,10 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
 
     // Result is in outFrameData
     // False return value means that the frame has a negative time stamp and should not be displayed.
-    REFERENCE_TIME rtStart;
+    REFERENCE_TIME rtStart, rtPrevStart = m_TimeManager.GetLastTimeStamp();
+
     bool bDiscardFrame = !SetTimeStamp(pOutSurface, rtStart);
-    bool bInIVTC = m_TimeManager.GetInverseTelecine();
+    bool bInIVTC = m_TimeManager.GetInverseTelecine(); // When true, current sequnce has 3:2 flags
     bool bNeedToResetVpp = false;
 
     // Init, reset or destroy VPP
@@ -1235,8 +1246,21 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                 // Run VPP
                 sts = m_pVPP->Process(pInSurface, pOutSurface);
 
+                // Check time stamp, interpolate newly created frames
+                if (sts >= 0 || MFX_ERR_MORE_SURFACE == sts)
+                {
+                    if (m_Config.bVppEnableDITimeStampsInterpolation)
+                    {
+                        REFERENCE_TIME rtNewStart = (MFX_ERR_MORE_SURFACE == sts) ? rtPrevStart : m_TimeManager.GetLastTimeStamp();                    
+                        if (pOutSurface->Data.TimeStamp == MFX_TIME_STAMP_INVALID && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
+                        {
+                            rtNewStart += (REFERENCE_TIME)(0.5 + 1e7 * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);
+                            pOutSurface->Data.TimeStamp = m_TimeManager.ConvertReferenceTime2MFXTime(rtNewStart);
+                        }
+                    }
+                }
                 // VPP failed
-                if (sts < 0 && sts != MFX_ERR_MORE_SURFACE)
+                else
                 {
                     MSDK_TRACE("QsDecoder: VPP->Process failed with error %i\n", (int)sts);
                     if (pOutSurface)
@@ -1510,6 +1534,10 @@ bool CQuickSync::IsVppNeeded(mfxU32 picStruct)
 
     // Detail and Denoise
     if (m_Config.nVppDetailStrength || m_Config.nVppDenoiseStrength)
+        return true;
+
+    // DI is forced to work
+    if (m_Config.bVppEnableForcedDeinterlacing)
         return true;
 
     // DI is disabled during soft inverse telecine
