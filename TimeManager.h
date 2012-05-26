@@ -106,6 +106,7 @@ public:
                             REFERENCE_TIME& rtStart);
     bool IsSampleInFields() { return m_bIsSampleInFields; }
     void OnVideoParamsChanged(double frameRate);
+    REFERENCE_TIME GetLastTimeStamp() { return m_rtPrevStart; }
 
     static const double fps2997;
     static const double fps23976;

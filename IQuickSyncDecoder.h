@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.32 Beta"
+#define QS_DEC_VERSION  "v0.33 Beta"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -144,11 +144,14 @@ struct CQsConfig
         unsigned vpp;
         struct
         {
-            bool     bVppEnableDeinterlacing :  1;
-            bool     bVppEnableFullRateDI    :  1; // true-> double frame rate
-            unsigned nVppDetailStrength      :  7; // Values are [0-64], 0 - disabled, 64 - full.
-            unsigned nVppDenoiseStrength     :  7; // Values are [0-64], 0 - disabled, 64 - full.
-            unsigned reserved3               : 16;
+            bool     bVppEnableDeinterlacing             :  1; // When true, DI will be used on interlaced content
+            bool     bVppEnableFullRateDI                :  1; // true-> double frame rate
+            unsigned nVppDetailStrength                  :  7; // Values are [0-64], 0 - disabled, 64 - full.
+            unsigned nVppDenoiseStrength                 :  7; // Values are [0-64], 0 - disabled, 64 - full.
+            bool     bVppEnableDITimeStampsInterpolation :  1; // Make sure deinterlaced frames have proper time stamps. MSDEK will not produce time stamps for new frames by default.
+            bool     bVppEnableForcedDeinterlacing       :  1; // DI will always work - forces interlacing flags on decoded frame
+            bool     bVppForcedTff                       :  1; // When forced DI is used, this will mark if the frames are TFF or BFF
+            unsigned reserved3                           : 13;
         };
     };
 };
