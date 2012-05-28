@@ -312,12 +312,13 @@ public:
         
         delete[] m_Buffer;
         m_Buffer = pNewBuffer;
+        m_Capacity = capacity;
         LeaveCriticalSection(&m_csBufferLock);
     }
 
 private:
     T*                 m_Buffer;           // Array holding the FIFO items
-    const size_t       m_Capacity;         // Max size
+    size_t             m_Capacity;         // Max size
     volatile size_t    m_Size;             // Current size
     size_t             m_Offset;           // Start of buffer
     CONDITION_VARIABLE m_BufferNotEmpty;   // Used for waiting till buffer is not empty

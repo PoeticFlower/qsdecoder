@@ -283,18 +283,18 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
     if (m_Config.bVppEnableForcedDeinterlacing && pInSurface != NULL)
     {
         // Frame is TFF
-        if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_TFF)
-            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
+        if (pInSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_TFF)
+            pInSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
         // Frame is BFF
-        else if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_BFF)
-            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_BFF;
+        else if (pInSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_BFF)
+            pInSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_BFF;
         // Frame is progressive - override with default flag
         else if (m_DefaultPicStruct != 0)
-            pOutSurface->Info.PicStruct = m_DefaultPicStruct;
+            pInSurface->Info.PicStruct = m_DefaultPicStruct;
         else
         {
             // Arbitrary choose TFF
-            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
+            pInSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
         }
     }
 
