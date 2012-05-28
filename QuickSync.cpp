@@ -101,7 +101,7 @@ CQuickSync::CQuickSync() :
 //    m_Config.bForceFieldOrder = true;
 //    m_Config.eFieldOrder = QS_FIELD_TFF;
 
-    // VPP
+    // VPP - Video Post Processing
     m_Config.bEnableVideoProcessing  = true;
     m_Config.bVppEnableDeinterlacing = true;
     m_Config.bVppEnableFullRateDI    = true;
@@ -567,7 +567,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     }
 
     // Deliver ready surfaces
-    int sentFrames = (m_ProcessedFramesQueue.Full()) ? DeliverSurface(false) : 0;
+    int sentFrames = (m_ProcessedFramesQueue.Full() || m_Config.bEnableVideoProcessing) ? DeliverSurface(false) : 0;
 
     MSDK_CHECK_NOT_EQUAL(m_OK, true, E_UNEXPECTED);
     HRESULT hr = S_OK;
@@ -612,7 +612,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             else
             {
                 // Make sure various queues are flushed (avoid deadlock)
-                if (m_ProcessedFramesQueue.Full())
+                if (m_ProcessedFramesQueue.Full() || m_Config.bEnableVideoProcessing)
                 {
                     sentFrames += DeliverSurface(false);
                 }
@@ -693,7 +693,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     MSDK_SAFE_DELETE_ARRAY(mfxBS.Data);
 
     // Deliver what's available
-    if (sentFrames == 0 || m_ProcessedFramesQueue.Full())
+    if (sentFrames == 0 || m_ProcessedFramesQueue.Full() || m_Config.bEnableVideoProcessing)
     {
         DeliverSurface(false);
     }
@@ -1214,14 +1214,25 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
 
     // Set frame pools capacity - may need to increase capacity due to DI being activated
     //  or encountered frame doubling/tripling (H264).
-    size_t poolCapacity = PROCESS_QUEUE_LENGTH + bVppNeeded * 3;
+    size_t oldPoolCapacity = m_FreeFramesPool.GetCapacity();
+    size_t newPoolCapacity = PROCESS_QUEUE_LENGTH + bVppNeeded * 3;
     if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FRAME_DOUBLING)
-        ++poolCapacity;
+        ++newPoolCapacity;
     if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FRAME_TRIPLING)
-        poolCapacity += 2;
+        newPoolCapacity += 2;
 
-    m_ProcessedFramesQueue.SetCapacity(poolCapacity);
-    m_FreeFramesPool.SetCapacity(poolCapacity);
+    if (newPoolCapacity > oldPoolCapacity)
+    {
+        m_ProcessedFramesQueue.SetCapacity(newPoolCapacity);
+        m_FreeFramesPool.SetCapacity(newPoolCapacity);
+    
+        // Fill free frames pool
+        for (unsigned i = oldPoolCapacity; i < newPoolCapacity; ++i)
+        {
+            TQsQueueItem item(new QsFrameData, new CQsAlignedBuffer(0));
+            m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
+        }
+    }
     
     // Store original surface
     mfxFrameSurface1* pInSurface = pOutSurface;
@@ -1338,6 +1349,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                 TQsQueueItem item;
                 for (int tries = 200; !m_bNeedToFlush && !m_FreeFramesPool.PopFront(item, 5); --tries)
                 {
+                    //MSDK_TRACE("QsDecoder: timeout waiting for free output surface\n");
                     if (m_bNeedToFlush || tries == 0)
                     {
                         if (m_pVPP)
