@@ -67,7 +67,7 @@ bool CDecTimeManager::CalcPtsOrder(const TFrameVector& frames)
         const REFERENCE_TIME& rtStart = GetSampleRefTime(frames[i]);
         if (INVALID_REFTIME != prevStart)
         {
-            // not montonic:
+            // not monotonic:
             if (rtStart < prevStart)
             {
                 m_bIsPTS = false;

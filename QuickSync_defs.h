@@ -28,6 +28,7 @@
 
 #pragma once
 
+// Uncomment for extra debug traces
 //#define VERBOSE
 
 #define TM_DECODE_FRAME  (WM_USER + 1)

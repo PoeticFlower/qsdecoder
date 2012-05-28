@@ -73,7 +73,7 @@ CQuickSync::CQuickSync() :
     m_pDecoder->SetOnDecodeComplete(&CQuickSync::OnDecodeComplete, this);
 
     MSDK_ZERO_VAR(m_DecVideoParams);
-    m_DecVideoParams.AsyncDepth = 2; //causes issues when 1
+    //m_DecVideoParams.AsyncDepth = 0; //causes issues when 1
     m_DecVideoParams.mfx.ExtendedPicStruct = 1;
 //
 // Set default configuration - override what's not zero/false
@@ -96,6 +96,10 @@ CQuickSync::CQuickSync() :
 
     // Currently not working well - menu decoding :(
 //    m_Config.bEnableDvdDecoding = true;
+
+    // Force field order
+//    m_Config.bForceFieldOrder = true;
+//    m_Config.eFieldOrder = QS_FIELD_TFF;
 
     // VPP
     m_Config.bEnableVideoProcessing  = true;
@@ -758,7 +762,8 @@ void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData:
     }
 
     // Progressive frame - note that sometimes interlaced content has the MFX_PICSTRUCT_PROGRESSIVE in combination with other flags
-    if (picStruct == MFX_PICSTRUCT_PROGRESSIVE)
+    // Frame doubling/trpling implies progressive source
+    if (picStruct == MFX_PICSTRUCT_PROGRESSIVE || picStruct & MFX_PICSTRUCT_FRAME_DOUBLING || picStruct & MFX_PICSTRUCT_FRAME_TRIPLING)
     {
         flags = AM_VIDEO_FLAG_WEAVE;
         return;
@@ -1155,24 +1160,40 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
 
     // Get oldest surface from queue
     pOutSurface = PopSurface();
+
     // Decoder queue is empty - return without error
     MSDK_CHECK_POINTER(pOutSurface, S_OK);
+
+    // Forced field order
+    if (m_Config.bForceFieldOrder && m_Config.eFieldOrder != QS_FIELD_AUTO)
+    {
+        if (m_Config.eFieldOrder == QS_FIELD_TFF)
+            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
+        else if (m_Config.eFieldOrder == QS_FIELD_BFF)
+            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_BFF;
+        else
+        {
+            MSDK_TRACE("QsDecoder: invalid field order parameter!\n");
+        }
+    }
 
     // Result is in outFrameData
     // False return value means that the frame has a negative time stamp and should not be displayed.
     REFERENCE_TIME rtStart, rtPrevStart = m_TimeManager.GetLastTimeStamp();
 
     bool bDiscardFrame = !SetTimeStamp(pOutSurface, rtStart);
-    bool bInIVTC = m_TimeManager.GetInverseTelecine(); // When true, current sequnce has 3:2 flags
+    bool bInIVTC = m_TimeManager.GetInverseTelecine(); // When true, current sequence has 3:2 flags
     bool bNeedToResetVpp = false;
+    bool bVppNeeded = false;
 
     // Init, reset or destroy VPP
     if (m_Config.bEnableVideoProcessing)
     {
-        bool bVppNeeded = IsVppNeeded(pOutSurface->Info.PicStruct);
+        bVppNeeded = IsVppNeeded(pOutSurface->Info.PicStruct);
         if (m_pVPP)
         {
-            // Will cause implicit reset if bInIVTC changes
+            // May cause implicit reset if bInIVTC changes
+            // Does nothing when forced DI is on.
             m_pVPP->EnableDI(!bInIVTC);
         }
 
@@ -1185,20 +1206,35 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
             {
                 m_pVPP = new CQuickSyncVPP(m_pDecoder->IsD3DAlloc(), m_pDecoder->GetFrameAllocator());
                 m_pVPP->EnableDI(!bInIVTC);
-                m_ProcessedFramesQueue.SetCapacity(PROCESS_QUEUE_LENGTH + 2);
-                m_FreeFramesPool.SetCapacity(PROCESS_QUEUE_LENGTH + 2);
             }
     
             bNeedToResetVpp = true;
         }
     }
 
+    // Set frame pools capacity - may need to increase capacity due to DI being activated
+    //  or encountered frame doubling/tripling (H264).
+    size_t poolCapacity = PROCESS_QUEUE_LENGTH + bVppNeeded * 3;
+    if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FRAME_DOUBLING)
+        ++poolCapacity;
+    if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FRAME_TRIPLING)
+        poolCapacity += 2;
+
+    m_ProcessedFramesQueue.SetCapacity(poolCapacity);
+    m_FreeFramesPool.SetCapacity(poolCapacity);
+    
     // Store original surface
     mfxFrameSurface1* pInSurface = pOutSurface;
     mfxStatus sts = MFX_ERR_NONE;
 
     // Set corrected time stamp
     pInSurface->Data.TimeStamp = m_TimeManager.ConvertReferenceTime2MFXTime(rtStart);
+
+    int frameDuplicates = 1;
+    if (pInSurface->Info.PicStruct & MFX_PICSTRUCT_FRAME_DOUBLING)
+        ++frameDuplicates;
+    else if (pInSurface->Info.PicStruct & MFX_PICSTRUCT_FRAME_TRIPLING)
+        frameDuplicates += 2;
 
     while (!m_bNeedToFlush)
     {
@@ -1220,14 +1256,20 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                 else
                 {
                     bNeedToResetVpp = false;
-                    mfxStatus sts = m_pVPP->Reset(m_Config, m_pDecoder->GetSession(), pInSurface);
+                    sts = m_pVPP->Reset(m_Config, m_pDecoder->GetSession(), pInSurface);
 
                     // Reset failed...
                     if (sts < 0)
                     {
                         // Change config to disable VPP from being created for this video 
-                        m_Config.bEnableVideoProcessing = false;
+                        if (sts != MFX_ERR_NOT_INITIALIZED)
+                        {
+                            m_Config.bEnableVideoProcessing = false;
+                        }
+
                         MSDK_SAFE_DELETE(m_pVPP);
+                        sts = MFX_ERR_NONE;
+                        pOutSurface = pInSurface;
                     }
 
                     // Do the loop again
@@ -1269,37 +1311,13 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                     }
 
                     pOutSurface = pInSurface;
+                    sts = MFX_ERR_NONE;
                 }
             }
         }
-
-        TQsQueueItem item;
-        for (int tries = 1000; !m_FreeFramesPool.PopFront(item, 5); --tries)
-        {
-            if (m_bNeedToFlush || tries == 0)
-            {
-                if (m_pVPP)
-                {
-                    // Release VPP surface
-                    // On VPP error this might not be a VPP surface but a decoder surface.
-                    // Calling UnlockSurface is a safe functions, it will work only on its own surfaces.
-                    m_pVPP->UnlockSurface(pOutSurface);
-                }
-
-                goto done;
-            }
-        }
-
-        QsFrameData* pOutFrameData = item.first;
-        QsFrameData& outFrameData = *pOutFrameData;
-        CQsAlignedBuffer*& pOutBuffer = item.second;
-
-        // Clear the outFrameData
-        MSDK_ZERO_VAR(outFrameData);
 
         if (pOutSurface->Data.Corrupted)
         {
-            outFrameData.bCorrupted = true;
             MSDK_TRACE("QsDecoder: warning received a corrupted frame\n");
 
             // Discard corrupted frames at the start of a sequence
@@ -1311,26 +1329,59 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
         }
 
         // If input frame was meant to be discarded then we still want to VPP to work -
-        // minimize VPP initialization artifacts
-        if (bDiscardFrame || m_bNeedToFlush)
+        // minimize VPP initialization artifacts.
+        // Create output frame
+        if (!(bDiscardFrame || m_bNeedToFlush))
         {
-            // Return frame to free pool
-            m_FreeFramesPool.PushBack(item, 0);
-        }
-        else
-        {
-            CopyFrame(pOutSurface, outFrameData, pOutBuffer);
+            for (int i = 0; i < frameDuplicates && !m_bNeedToFlush; ++i)
+            {
+                TQsQueueItem item;
+                for (int tries = 200; !m_bNeedToFlush && !m_FreeFramesPool.PopFront(item, 5); --tries)
+                {
+                    if (m_bNeedToFlush || tries == 0)
+                    {
+                        if (m_pVPP)
+                        {
+                            // Release VPP surface
+                            // On VPP error this might not be a VPP surface but a decoder surface.
+                            // Calling UnlockSurface is a safe functions, it will work only on its own surfaces.
+                            m_pVPP->UnlockSurface(pOutSurface);
+                        }
 
-            // Keep or drop the processed frame
-            if (!m_bNeedToFlush)
-            {
-                // Enter result in the processed queue
-                m_ProcessedFramesQueue.PushBack(item, 0);
-            }
-            else
-            {
-                // Return to free pool
-                m_FreeFramesPool.PushBack(item, 0);
+                        goto done;
+                    }
+                }
+
+                QsFrameData* pOutFrameData = item.first;
+                QsFrameData& outFrameData = *pOutFrameData;
+                CQsAlignedBuffer*& pOutBuffer = item.second;
+
+                // Clear the outFrameData
+                MSDK_ZERO_VAR(outFrameData);
+
+                outFrameData.bCorrupted = pOutSurface->Data.Corrupted != 0;
+
+                // Copy to output surface and write metadata
+                CopyFrame(pOutSurface, outFrameData, pOutBuffer);
+
+                // Fix time stamps for duplicated frames
+                if (outFrameData.rtStart != INVALID_REFTIME && pOutSurface->Info.FrameRateExtN > 0)
+                {
+                    outFrameData.rtStart += (REFERENCE_TIME)(0.5 + (1e7 * i) * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);
+                    outFrameData.rtStop = outFrameData.rtStart + 1;
+                }
+
+                // Keep or drop the processed frame
+                if (!m_bNeedToFlush)
+                {
+                    // Enter result in the processed queue
+                    m_ProcessedFramesQueue.PushBack(item, 0);
+                }
+                else
+                {
+                    // Return to free pool
+                    m_FreeFramesPool.PushBack(item, 0);
+                }
             }
         }
 
@@ -1340,7 +1391,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
             m_pVPP->UnlockSurface(pOutSurface);
         }
 
-        // VPP might have another surface ready (DI active)
+        // VPP might have another surface ready (DI active at double/full rate)
         if (MFX_ERR_MORE_SURFACE != sts)
             break;
     }
@@ -1532,9 +1583,13 @@ bool CQuickSync::IsVppNeeded(mfxU32 picStruct)
     if (!m_Config.bEnableVideoProcessing)
         return false;
 
-    // Detail and Denoise
+    // Detail and Denoise are on
     if (m_Config.nVppDetailStrength || m_Config.nVppDenoiseStrength)
         return true;
+
+    // DI is off
+    if (!m_Config.bVppEnableDeinterlacing)
+        return false;
 
     // DI is forced to work
     if (m_Config.bVppEnableForcedDeinterlacing)
@@ -1542,6 +1597,13 @@ bool CQuickSync::IsVppNeeded(mfxU32 picStruct)
 
     // DI is disabled during soft inverse telecine
     if (m_TimeManager.GetInverseTelecine())
+        return false;
+
+    // Frame doubling / tripling of progressive frames
+    if ((picStruct == MFX_PICSTRUCT_FRAME_DOUBLING) ||
+        (picStruct == MFX_PICSTRUCT_FRAME_TRIPLING) ||
+        (picStruct == (MFX_PICSTRUCT_FRAME_DOUBLING | MFX_PICSTRUCT_PROGRESSIVE)) ||
+        (picStruct == (MFX_PICSTRUCT_FRAME_TRIPLING | MFX_PICSTRUCT_PROGRESSIVE)))
         return false;
 
     // Note - m_PicStruct is set to progressive in OnSeek()
