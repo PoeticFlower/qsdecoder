@@ -375,7 +375,8 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
         }
         else if (MFX_WRN_DEVICE_BUSY == sts)
         {
-            MSDK_TRACE("QsDecoder: MFX_WRN_DEVICE_BUSY\n");
+            static int s_BusyCount = 0;
+            MSDK_TRACE("QsDecoder: MFX_WRN_DEVICE_BUSY (%i)\n", ++s_BusyCount);
             Sleep(1);
         }
     } while (MFX_WRN_DEVICE_BUSY == sts || MFX_ERR_MORE_SURFACE == sts);

@@ -80,22 +80,55 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     ASSERT(this != NULL);
     CQsAutoLock lock(&m_csLock);
 
+    if (!config.bEnableVideoProcessing)
+    {
+        Close();
+        return MFX_ERR_NOT_INITIALIZED;
+    }
+
     mfxStatus sts;
     MSDK_CHECK_POINTER(pVideoSession, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(m_pFrameAllocator, MFX_ERR_NULL_PTR);
 
+    // Forced deinterlacing:
+    // Interlaced frames keep their flags, progressive frames are modified
     if (config.bVppEnableForcedDeinterlacing)
     {
         m_bEnableDI = true;
-        pSurface->Info.PicStruct = (mfxU16)((config.bVppForcedTff) ? MFX_PICSTRUCT_FIELD_TFF : MFX_PICSTRUCT_FIELD_BFF);
+        m_DefaultPicStruct = 0;
+
+        switch (config.eFieldOrder)
+        {
+        case QS_FIELD_AUTO:
+            {
+                if (pSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_TFF)
+                {
+                    m_DefaultPicStruct = MFX_PICSTRUCT_FIELD_TFF;
+                }
+                else if (pSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_BFF)
+                {
+                    m_DefaultPicStruct = MFX_PICSTRUCT_FIELD_BFF;
+                }
+            }
+            break;
+        case QS_FIELD_TFF:
+            m_DefaultPicStruct = MFX_PICSTRUCT_FIELD_TFF;
+            break;
+        case QS_FIELD_BFF:
+            m_DefaultPicStruct = MFX_PICSTRUCT_FIELD_BFF;
+            break;
+        default:
+            break;
+        }
+
+        pSurface->Info.PicStruct = m_DefaultPicStruct;
     }
 
     // Check if VPP is enabled
-    if (!config.bEnableVideoProcessing ||
-        ((!config.bVppEnableDeinterlacing || !m_bEnableDI) && config.nVppDenoiseStrength == 0 && config.nVppDetailStrength == 0))
+    if ((!config.bVppEnableDeinterlacing || !m_bEnableDI) && config.nVppDenoiseStrength == 0 && config.nVppDetailStrength == 0)
     {
         Close();
-        return MFX_ERR_INVALID_VIDEO_PARAM;
+        return MFX_ERR_NOT_INITIALIZED;
     }
 
     m_nPitch = pSurface->Data.Pitch;
@@ -104,7 +137,6 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     m_pVideoSession = pVideoSession;
 
     // Create VPP video params
-    m_VppVideoParams.AsyncDepth = 2;
     m_VppVideoParams.vpp.In  = pSurface->Info;
     m_VppVideoParams.vpp.Out = pSurface->Info;
     m_VppVideoParams.vpp.In.AspectRatioH = m_VppVideoParams.vpp.In.AspectRatioW = 0;
@@ -119,10 +151,11 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     // Enable auto-deinterlacing by forcing output frames to be progressive
     if (m_Config.bVppEnableDeinterlacing && m_bEnableDI)
     {
-        if (pSurface->Info.PicStruct != MFX_PICSTRUCT_PROGRESSIVE)
+        if ((pSurface->Info.PicStruct & 0x1F) != MFX_PICSTRUCT_PROGRESSIVE)
         {
             m_VppVideoParams.vpp.Out.PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
-            if (m_Config.bVppEnableFullRateDI)
+            double inputFrameRate = (m_VppVideoParams.vpp.Out.FrameRateExtD > 0) ? (double)m_VppVideoParams.vpp.Out.FrameRateExtN / (double)m_VppVideoParams.vpp.Out.FrameRateExtD : 0;
+            if (m_Config.bVppEnableFullRateDI &&  inputFrameRate < 30.001)
             {
                 m_VppVideoParams.vpp.Out.FrameRateExtN *= 2;
             }
@@ -249,7 +282,20 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
     // Force interlaced flags
     if (m_Config.bVppEnableForcedDeinterlacing && pInSurface != NULL)
     {
-        pInSurface->Info.PicStruct = (mfxU16)((m_Config.bVppForcedTff) ? MFX_PICSTRUCT_FIELD_TFF : MFX_PICSTRUCT_FIELD_BFF);
+        // Frame is TFF
+        if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_TFF)
+            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
+        // Frame is BFF
+        else if (pOutSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_BFF)
+            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_BFF;
+        // Frame is progressive - override with default flag
+        else if (m_DefaultPicStruct != 0)
+            pOutSurface->Info.PicStruct = m_DefaultPicStruct;
+        else
+        {
+            // Arbitrary choose TFF
+            pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
+        }
     }
 
     if (m_Config.bVppEnableDeinterlacing && pInSurface != NULL)

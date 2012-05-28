@@ -299,9 +299,10 @@ public:
 
     void SetCapacity(size_t capacity)
     {
-        EnterCriticalSection(&m_csBufferLock);
-        if (capacity < m_Capacity)
+        if (capacity <= m_Capacity)
             return;
+
+        EnterCriticalSection(&m_csBufferLock);
 
         T* pNewBuffer = new T[capacity];
         for (size_t i = 0; i < m_Capacity; ++i)

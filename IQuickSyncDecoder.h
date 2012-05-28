@@ -47,6 +47,13 @@ enum QsCaps
     QS_CAP_PROCAMP          = 32
 };
 
+enum QsFieldOrder
+{
+    QS_FIELD_AUTO = 0,
+    QS_FIELD_TFF  = 1,
+    QS_FIELD_BFF  = 2
+};
+
 // This struct holds an output frame + meta data
 struct QsFrameData
 {
@@ -119,7 +126,10 @@ struct CQsConfig
             bool     bEnableMtProcessing    :  1; // perform post decode processing on another thread
             bool     bEnableVideoProcessing :  1;
             bool     bEnableSwEmulation     :  1; // When true, a SW version of the decoder will be used (if possible) if HW fails
-            unsigned reserved1              : 19;
+            bool     bForceFieldOrder       :  1; // When true decoder interlacing flags are overwriten
+            unsigned eFieldOrder            :  2; // When forced DI is used, this will mark if the progressive frames as TFF or BFF
+
+            unsigned reserved1              : 16;
         };
     };
 
@@ -148,10 +158,15 @@ struct CQsConfig
             bool     bVppEnableFullRateDI                :  1; // true-> double frame rate
             unsigned nVppDetailStrength                  :  7; // Values are [0-64], 0 - disabled, 64 - full.
             unsigned nVppDenoiseStrength                 :  7; // Values are [0-64], 0 - disabled, 64 - full.
-            bool     bVppEnableDITimeStampsInterpolation :  1; // Make sure deinterlaced frames have proper time stamps. MSDEK will not produce time stamps for new frames by default.
-            bool     bVppEnableForcedDeinterlacing       :  1; // DI will always work - forces interlacing flags on decoded frame
-            bool     bVppForcedTff                       :  1; // When forced DI is used, this will mark if the frames are TFF or BFF
-            unsigned reserved3                           : 13;
+            bool     bVppEnableDITimeStampsInterpolation :  1; // Make sure deinterlaced frames have proper time stamps.
+                                                               // MSDK will not produce time stamps for interpolated frames by default.
+            bool     bVppEnableForcedDeinterlacing       :  1; // DI will always work - forces interlacing flags on decoded progressive frames and deinterlaces them,
+                                                               // uses eFieldOrder as hint:
+                                                               // QS_FIELD_AUTO - turn progressive frames' flags to the last encountered interlaced flag. Default to TFF
+                                                               // QS_FIELD_TFF - deinterlace progressive frames using TFF flags
+                                                               // QS_FIELD_BFF - deinterlace progressive frames using BFF flags
+
+            unsigned reserved3                           : 14;
         };
     };
 };

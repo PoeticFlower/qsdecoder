@@ -86,6 +86,8 @@ protected:
     mfxU32           m_nPitch;
     bool             m_bNeedReset;
     bool             m_bEnableDI;
+    mfxU16           m_DefaultPicStruct;
+
     // Allocator
     MFXFrameAllocator*    m_pFrameAllocator;
     mfxFrameSurface1*     m_pFrameSurfaces;
