@@ -233,7 +233,6 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
     {
     }
 
-
     // Soft reset
     if (m_pVPP)
     {
@@ -377,26 +376,28 @@ mfxStatus CQuickSyncVPP::InitFrameAllocator()
     mfxStatus sts = MFX_ERR_NONE;
     MSDK_CHECK_POINTER(m_pFrameAllocator, MFX_ERR_NULL_PTR);
 
-    mfxFrameAllocRequest allocRequest[2];
+    //Check if existing allocation is OK
+    if (m_pFrameSurfaces != NULL)
+    {
+        const mfxFrameInfo& oldInfo = m_pFrameSurfaces[0].Info;
+        const mfxFrameInfo& newInfo = m_VppVideoParams.vpp.In;
+        if (newInfo.Width == oldInfo.Width &&
+            newInfo.Height == oldInfo.Height && 
+            m_pFrameSurfaces[0].Data.Pitch == m_nPitch)
+        {
+            goto done;
+        }
+    }
+    
+    mfxFrameAllocRequest  allocRequest[2];
     MSDK_ZERO_VAR(allocRequest);
 
     sts = m_pVPP->QueryIOSurf(&m_VppVideoParams, allocRequest);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
     MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
-      
-    // Check if existing allocation is OK
-    if (m_pFrameSurfaces != NULL && allocRequest[1].NumFrameSuggested <= m_nRequiredFramesNum &&
-        allocRequest[1].Info.Width == m_pFrameSurfaces[0].Info.Width &&
-        allocRequest[1].Info.Height == m_pFrameSurfaces[0].Info.Height && 
-        m_pFrameSurfaces[0].Data.Pitch == m_nPitch)
-    {
-        goto done;
-    }
-    else
-    {
-        FreeFrameAllocator();
-    }
+
+    FreeFrameAllocator();
 
     // Decide memory type
     allocRequest[1].Type = MFX_MEMTYPE_EXTERNAL_FRAME | MFX_MEMTYPE_FROM_VPPOUT;
