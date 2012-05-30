@@ -319,7 +319,7 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
 
     rc = sts;
 
-    if (MFX_ERR_NONE == sts || MFX_ERR_MORE_SURFACE == sts)
+    if (sts >= 0 || MFX_ERR_MORE_SURFACE == sts)
     {
         // Wait for the asynch decoding to finish
         while (MFX_WRN_IN_EXECUTION == (sts = m_pVideoSession->SyncOperation(syncp, 0xFFFF)))
