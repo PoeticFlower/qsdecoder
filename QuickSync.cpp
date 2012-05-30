@@ -469,15 +469,54 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (m_Config.bEnableVideoProcessing)
     {
         // If forced DI is enabled, DI is enabled.
-        if (m_Config.bVppEnableForcedDeinterlacing)
+        // DI is auto enabled when detail/denoise are on as these work on progressive frames.
+        if (m_Config.bVppEnableForcedDeinterlacing || m_Config.nVppDetailStrength > 0 || m_Config.nVppDenoiseStrength> 0)
         {
             m_Config.bVppEnableDeinterlacing = true;
+        }
+
+        if (m_Config.bVppEnableForcedDeinterlacing)
+        {
+            MSDK_TRACE("QsDecoder: forced deinterlacing is active\n");
+        }
+        else if (m_Config.bVppEnableDeinterlacing)
+        {
+            MSDK_TRACE("QsDecoder: auto deinterlacing is active\n");
+        }
+
+        if (m_Config.nVppDetailStrength > 0)
+        {
+            MSDK_TRACE("QsDecoder: detail filter is at %i%%\n", 100 * m_Config.nVppDetailStrength / 64);
+        }
+
+        if (m_Config.nVppDenoiseStrength > 0)
+        {
+            MSDK_TRACE("QsDecoder: denoise filter is at %i%%\n", 100 * m_Config.nVppDenoiseStrength / 64);
         }
     }
     // Make sure all VPP features are disabled
     else
     {
         m_Config.vpp = 0;
+    }
+
+    if (m_Config.bForceFieldOrder)
+    {
+        switch (m_Config.eFieldOrder)
+        {
+        case QS_FIELD_AUTO:
+            MSDK_TRACE("QsDecoder: field order is set to AUTO\n");
+            break;
+        case QS_FIELD_TFF:
+            MSDK_TRACE("QsDecoder: field order is set to TFF\n");
+            break;
+        case QS_FIELD_BFF:
+            MSDK_TRACE("QsDecoder: field order is set to BFF\n");
+            break;
+        default:
+            MSDK_TRACE("QsDecoder: invalid field order parameter reverting to AUTO!\n");
+            m_Config.eFieldOrder = QS_FIELD_AUTO;
+        }
     }
 
     // Create worker thread
@@ -1171,10 +1210,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
             pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
         else if (m_Config.eFieldOrder == QS_FIELD_BFF)
             pOutSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_BFF;
-        else
-        {
-            MSDK_TRACE("QsDecoder: invalid field order parameter!\n");
-        }
     }
 
     // Result is in outFrameData

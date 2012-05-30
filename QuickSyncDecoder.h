@@ -132,15 +132,17 @@ public:
 
         if (i < m_nRequiredFramesNum)
         {
+            ASSERT(m_LockedSurfaces[i] > 0);
             InterlockedDecrement(&m_LockedSurfaces[i]);
         }
     }
 
     __forceinline bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
     {
+        ASSERT(pSurface != NULL);
         size_t i = pSurface - m_pFrameSurfaces;
         ASSERT(i < m_nRequiredFramesNum);
-        return m_LockedSurfaces[i] > 0 || pSurface->Data.Locked > 0;
+        return (i < m_nRequiredFramesNum) ? (m_LockedSurfaces[i] > 0 || pSurface->Data.Locked > 0) : true;
     }
 
     __forceinline bool IsD3DAlloc() { return m_bUseD3DAlloc; }
