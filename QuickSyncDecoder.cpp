@@ -81,7 +81,6 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     sts = InitSession(impl);
 }
 
-
 CQuickSyncDecoder::~CQuickSyncDecoder()
 {
     // Wait for the worker thread to finish

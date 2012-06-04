@@ -73,7 +73,7 @@ CQuickSync::CQuickSync() :
     m_pDecoder->SetOnDecodeComplete(&CQuickSync::OnDecodeComplete, this);
 
     MSDK_ZERO_VAR(m_DecVideoParams);
-    //m_DecVideoParams.AsyncDepth = 0; //causes issues when 1
+    //m_DecVideoParams.AsyncDepth = 0; // Causes issues when 1 - in old drivers
     m_DecVideoParams.mfx.ExtendedPicStruct = 1;
 //
 // Set default configuration - override what's not zero/false
@@ -995,10 +995,10 @@ bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStar
     // Always send frame to time manager so it can track inverse telecine
     bool rc = m_TimeManager.GetSampleTimeStamp(frames, rtStart);
 
-    // Retrun corrected time stamp
+    // Return corrected time stamp
     if (m_Config.bTimeStampCorrection)
     {
-        return rc && pSurface->Data.TimeStamp >= 0;
+        return rc && rtStart >= 0;
     }
 
     // Just convert the time stamp from the HW decoder
@@ -1262,7 +1262,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
         m_FreeFramesPool.SetCapacity(newPoolCapacity);
     
         // Fill free frames pool
-        for (unsigned i = oldPoolCapacity; i < newPoolCapacity; ++i)
+        for (size_t i = oldPoolCapacity; i < newPoolCapacity; ++i)
         {
             TQsQueueItem item(new QsFrameData, new CQsAlignedBuffer(0));
             m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
