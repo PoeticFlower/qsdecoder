@@ -541,7 +541,12 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (sts == MFX_ERR_NONE)
     {
         m_pDecoder->SetConfig(m_Config);
-        size_t surfaceCount = max(8, m_Config.nOutputQueueLength) + DECODE_QUEUE_LENGTH;
+        size_t surfaceCount = max(8, m_Config.nOutputQueueLength);
+        if (m_Config.bEnableMtProcessing)
+        {
+            surfaceCount += DECODE_QUEUE_LENGTH;
+        }
+
         if (m_Config.bVppEnableDeinterlacing)
         {
             surfaceCount += 5;
@@ -769,7 +774,7 @@ int CQuickSync::DeliverSurface(bool bWaitForCompletion)
     }
     else
     {
-        while (m_ProcessedFramesQueue.PopFront(item, 0 /* don't wait, use what's ready*/))
+        while (m_ProcessedFramesQueue.PopFront(item, 0 /* Don't wait, use what's ready */))
         {
             if (!m_bNeedToFlush)
             {
@@ -789,7 +794,7 @@ int CQuickSync::DeliverSurface(bool bWaitForCompletion)
 
 void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData::QsFrameStructure& frameStructure)
 {
-    // Note MSDK will never output fields
+    // Note: MSDK will never output fields
     frameStructure = (picStruct & MFX_PICSTRUCT_PROGRESSIVE) ?
         QsFrameData::fsProgressiveFrame :
         QsFrameData::fsInterlacedFrame;
@@ -895,6 +900,8 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
 
 void CQuickSync::FlushOutputQueue()
 {
+    MSDK_TRACE("QsDecoder: FlushOutputQueue (deliverFrames=%s)\n", (!m_bNeedToFlush) ? "TRUE" : "FALSE");
+
     // Wait for async decoder to become available
     m_pDecoder->WaitForDecoder();
 
@@ -907,14 +914,14 @@ void CQuickSync::FlushOutputQueue()
 
     DeliverSurface(true);
 
-    MSDK_TRACE("QsDecoder: FlushOutputQueue (deliverFrames=%s)\n", (!m_bNeedToFlush) ? "TRUE" : "FALSE");
+    // Empty the decoded output queue
     for (size_t i = m_pDecoder->OutputQueueSize(); i > 0; --i)
     {
         QueueSurface(NULL, false);
     }
 
-    // Clear the internal frame queue - either failure in flushing or no need to deliver the frames.
-    while (!m_pDecoder->OutputQueueEmpty())
+    // Clear the decoded output queue - either failure in flushing or no need to deliver the frames.
+    for (size_t i = m_pDecoder->OutputQueueSize(); i > 0; --i)
     {
         // Surface is not needed anymore
         m_pDecoder->UnlockSurface(PopSurface());
@@ -943,10 +950,11 @@ void CQuickSync::ClearQueue()
 HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
 {
     MSDK_TRACE("QsDecoder: OnSeek\n");
-
-    CQsAutoLock cObjectLock(&m_csLock);
+    MSDK_CHECK_POINTER(m_pDecoder, E_UNEXPECTED);
 
     m_bNeedToFlush = true;
+    CQsAutoLock cObjectLock(&m_csLock);
+
     mfxStatus sts = MFX_ERR_NONE;
     m_nSegmentFrameCount = 0;
     m_PicStruct = MFX_PICSTRUCT_PROGRESSIVE;
@@ -954,31 +962,24 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
     // Make sure the worker thread is idle and released all resources
     FlushOutputQueue();
 
-    if (m_pDecoder)
+    m_TimeManager.Reset();
+    if (m_pVPP)
     {
-        m_TimeManager.Reset();
-        if (m_pVPP)
-        {
-            if (m_DecVideoParams.mfx.CodecId == MFX_CODEC_VC1 && m_DecVideoParams.mfx.CodecProfile == MFX_PROFILE_VC1_ADVANCED)
-            {
-                MSDK_SAFE_DELETE(m_pVPP);
-            }
-            else
-            {
-                m_pVPP->Reset();
-            }
-        }
+        // If VPP is active, we may need to flush it
+        FlushVPP();
 
-        sts = m_pDecoder->Reset(&m_DecVideoParams, m_nPitch);
-        if (sts != MFX_ERR_NONE)
-        {
-            MSDK_TRACE("QsDecoder: reset failed!\n");
-            return E_FAIL;
-        }
-        
-        m_pFrameConstructor->Reset();
-        FlushOutputQueue();
+        MSDK_SAFE_DELETE(m_pVPP);
     }
+
+    sts = m_pDecoder->Reset(&m_DecVideoParams, m_nPitch);
+    if (sts != MFX_ERR_NONE)
+    {
+        MSDK_TRACE("QsDecoder: reset failed!\n");
+        return E_FAIL;
+    }
+
+    m_pFrameConstructor->Reset();
+    FlushOutputQueue();
 
     m_bNeedToFlush = false;
     MSDK_TRACE("QsDecoder: OnSeek complete\n");

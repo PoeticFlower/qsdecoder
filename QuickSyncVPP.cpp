@@ -297,6 +297,7 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
         }
     }
 
+    // Workaround for DI bug - doesn't accept frame with MFX_PICSTRUCT_PROGRESSIVE flag
     if (m_Config.bVppEnableDeinterlacing && pInSurface != NULL)
     {
         mfxU16& picStruct = pInSurface->Info.PicStruct;
