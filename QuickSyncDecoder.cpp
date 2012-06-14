@@ -273,13 +273,6 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
                 }
             }
 
-            // Another VC1 decoder workaround
-            for (int i = 0; i < m_nRequiredFramesNum; ++i)
-            {
-                m_pFrameSurfaces[i].Data.Locked = 0;
-                m_LockedSurfaces[i] = 0;
-            }
-
             bInited = false;
         }
         else
@@ -291,6 +284,16 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
                 m_pmfxDEC->Close();
                 FreeFrameAllocator();
                 bInited = false;
+            }
+        }
+
+        if (m_pFrameSurfaces != NULL)
+        {
+            // Another VC1 decoder + VPP bug workaround
+            for (int i = 0; i < m_nRequiredFramesNum; ++i)
+            {
+                m_pFrameSurfaces[i].Data.Locked = 0;
+                m_LockedSurfaces[i] = 0;
             }
         }
     }
