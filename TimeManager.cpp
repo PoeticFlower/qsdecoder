@@ -221,11 +221,20 @@ bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
         if (m_dFrameRate > 0 || INVALID_REFTIME == rtDecoder)
         {
             rtStart = m_rtPrevStart + (REFERENCE_TIME)(0.5 + 1e7 / m_dFrameRate);
+
             auto it = m_OutputTimeStamps.begin();
             if (it != m_OutputTimeStamps.end())
             {
                 REFERENCE_TIME rtTemp = *(it);
-                if (rtTemp < rtStart || abs(rtTemp - rtStart) < 25000) // diff is less than 2.5ms
+
+                // Check if the lowest timetamp is very far (100ms) than the expected timestamp
+                if (abs(rtTemp - rtStart) > 1000000)
+                {
+                    rtStart = rtTemp;
+                    m_OutputTimeStamps.erase(it);
+                }
+                // Remove lowest timestamp if it's very close to the expected timestamp
+                else if (rtTemp < rtStart || abs(rtTemp - rtStart) < 25000) // diff is less than 2.5ms
                 {
                     m_OutputTimeStamps.erase(it);
                 }
