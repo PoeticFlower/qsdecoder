@@ -219,7 +219,7 @@ mfxStatus CQuickSyncDecoder::InitFrameAllocator(mfxVideoParam* pVideoParams, mfx
 mfxStatus CQuickSyncDecoder::FreeFrameAllocator()
 {
     mfxStatus sts = MFX_ERR_NONE;
-    if (m_pFrameAllocator)
+    if (m_pFrameAllocator && m_AllocResponse.NumFrameActual > 0)
     {
         sts = m_pFrameAllocator->Free(m_pFrameAllocator->pthis, &m_AllocResponse);
         MSDK_ZERO_VAR(m_AllocResponse);
@@ -500,6 +500,120 @@ mfxStatus CQuickSyncDecoder::InitD3D()
     return MFX_ERR_NONE;
 }
 
+mfxStatus CQuickSyncDecoder::InitD3DFromRenderer()
+{
+    // Get DirectX Object
+    HANDLE hDevice;
+    IDirect3DDevice9* pDevice = NULL;
+    CComPtr<IDirect3D9> pD3D;
+    D3DDEVICE_CREATION_PARAMETERS devParames;
+    D3DADAPTER_IDENTIFIER9 adIdentifier;
+    D3DPRESENT_PARAMETERS d3dParams = {1, 1, D3DFMT_X8R8G8B8, 1, D3DMULTISAMPLE_NONE, 0, D3DSWAPEFFECT_DISCARD, NULL, TRUE, FALSE, D3DFMT_UNKNOWN, 0, 0, D3DPRESENT_INTERVAL_IMMEDIATE};
+    mfxStatus sts = MFX_ERR_NONE;
+
+    HRESULT hr = m_pRendererD3dDeviceManager->OpenDeviceHandle(&hDevice);
+    if (FAILED(hr))
+    {
+        MSDK_TRACE("QsDecoder: failed to open device handle!\n");
+        goto done;
+    }
+    hr = m_pRendererD3dDeviceManager->LockDevice(hDevice, &pDevice, TRUE);
+    if (FAILED(hr) && NULL == pDevice)
+    {
+        MSDK_TRACE("QsDecoder: failed to lock device!\n");
+        goto done;
+    }
+
+    hr = pDevice->GetDirect3D(&pD3D);
+    if (FAILED(hr))
+    {
+        MSDK_TRACE("QsDecoder: failed to get D3D9 object!\n");
+        goto done;
+    }
+
+    hr = pDevice->GetCreationParameters(&devParames);
+    if (FAILED(hr))
+    {
+        MSDK_TRACE("QsDecoder: failed to get device creation params!\n");
+        goto done;
+    }
+
+    hr = pD3D->GetAdapterIdentifier(devParames.AdapterOrdinal, 0, &adIdentifier);
+    if (FAILED(hr))
+    {
+        MSDK_TRACE("QsDecoder: failed to get adapter identifier!\n");
+        goto done;
+    }
+
+    // If renderer is already on Intel's GPU than we can reuse the device.
+    if (adIdentifier.VendorId == 0x8086) // Intel's vendor ID  is 8086h
+    {
+        m_pD3dDeviceManager = m_pRendererD3dDeviceManager;
+        goto done;
+    }
+
+    // Find Intel adapter number - not always the default adapter
+    int adapterId = GetIntelAdapterId(pD3D);
+    if (adapterId < 0)
+    {
+        hr = E_FAIL;
+        MSDK_TRACE("QsDecoder: didn't find an Intel GPU.\n");
+        goto done;
+    }
+
+    // Create d3d device
+    m_pD3dDevice = 0;
+    d3dParams.hDeviceWindow = devParames.hFocusWindow;
+    hr = pD3D->CreateDevice(
+        adapterId,
+        D3DDEVTYPE_HAL,
+        devParames.hFocusWindow,
+        D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED | D3DCREATE_FPU_PRESERVE,
+        &d3dParams,
+        &m_pD3dDevice);
+
+    if (FAILED(hr) || !m_pD3dDevice)
+    {
+        hr = E_FAIL;
+        MSDK_TRACE("QsDecoder: InitD3d CreateDevice failed!\n");
+        goto done;
+    }
+
+    // Create device manager            
+    hr = DXVA2CreateDirect3DDeviceManager9(&m_ResetToken, &m_pD3dDeviceManager);
+    if (FAILED(hr) || !m_pD3dDeviceManager)
+    {
+        hr = E_FAIL;
+        MSDK_TRACE("QsDecoder: InitD3d DXVA2CreateDirect3DDeviceManager9 failed!\n");
+        goto done;
+    }
+
+    // Reset the d3d device
+    hr = m_pD3dDeviceManager->ResetDevice(m_pD3dDevice, m_ResetToken);
+    if (FAILED(hr))
+    {
+        hr = E_FAIL;
+        MSDK_TRACE("QsDecoder: InitD3d ResetDevice failed!\n");
+        goto done;
+    }
+
+    // Cleanup
+done:
+    if (FAILED(hr))
+    {
+        sts = MFX_ERR_DEVICE_FAILED;
+    }
+
+    MSDK_SAFE_RELEASE(pDevice);
+    if (hDevice != NULL)
+    {
+        m_pRendererD3dDeviceManager->UnlockDevice(hDevice, FALSE);
+        m_pRendererD3dDeviceManager->CloseDeviceHandle(&hDevice);
+    }
+
+    return sts;
+}
+
 void CQuickSyncDecoder::CloseD3D()
 {
     if (m_bUseD3DAlloc)
@@ -546,7 +660,6 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
     ASSERT(m_pVideoParams != NULL);
     std::auto_ptr<D3DAllocatorParams> pParam(NULL);
     mfxStatus sts = MFX_ERR_NONE;
-    int adapterId = -1;
 
     // Setup allocator - HW acceleration
     if (m_bUseD3DAlloc)
@@ -558,115 +671,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
         // We'll use the supplied renderer's device manager.
         if (m_pRendererD3dDeviceManager)
         {
-            // Get DirectX Object
-            HANDLE hDevice;
-            IDirect3DDevice9* pDevice = NULL;
-            CComPtr<IDirect3D9> pD3D;
-            D3DDEVICE_CREATION_PARAMETERS devParames;
-            D3DADAPTER_IDENTIFIER9 adIdentifier;
-            D3DPRESENT_PARAMETERS d3dParams = {1, 1, D3DFMT_X8R8G8B8, 1, D3DMULTISAMPLE_NONE, 0, D3DSWAPEFFECT_DISCARD, NULL, TRUE, FALSE, D3DFMT_UNKNOWN, 0, 0, D3DPRESENT_INTERVAL_IMMEDIATE};
-
-            HRESULT hr = m_pRendererD3dDeviceManager->OpenDeviceHandle(&hDevice);
-            if (FAILED(hr))
-            {
-                MSDK_TRACE("QsDecoder: failed to open device handle!\n");
-                goto done;
-            }
-            hr = m_pRendererD3dDeviceManager->LockDevice(hDevice, &pDevice, TRUE);
-            if (FAILED(hr) && NULL == pDevice)
-            {
-                MSDK_TRACE("QsDecoder: failed to lock device!\n");
-                goto done;
-            }
-
-            hr = pDevice->GetDirect3D(&pD3D);
-            if (FAILED(hr))
-            {
-                MSDK_TRACE("QsDecoder: failed to get D3D9 object!\n");
-                goto done;
-            }
-
-            hr = pDevice->GetCreationParameters(&devParames);
-            if (FAILED(hr))
-            {
-                MSDK_TRACE("QsDecoder: failed to get device creation params!\n");
-                goto done;
-            }
-
-            hr = pD3D->GetAdapterIdentifier(devParames.AdapterOrdinal, 0, &adIdentifier);
-            if (FAILED(hr))
-            {
-                MSDK_TRACE("QsDecoder: failed to get adapter identifier!\n");
-                goto done;
-            }
-
-            // If renderer is already on Intel's GPU than we can reuse the device.
-            if (adIdentifier.VendorId == 0x8086) // Intel's vendor ID  is 8086h
-            {
-                m_pD3dDeviceManager = m_pRendererD3dDeviceManager;
-                goto done;
-            }
-
-            // Find Intel adapter number - not always the default adapter
-            adapterId = GetIntelAdapterId(pD3D);
-            if (adapterId < 0)
-            {
-                hr = E_FAIL;
-                MSDK_TRACE("QsDecoder: didn't find an Intel GPU.\n");
-                goto done;
-            }
-
-            // Create d3d device
-            m_pD3dDevice = 0;
-            d3dParams.hDeviceWindow = devParames.hFocusWindow;
-            hr = pD3D->CreateDevice(
-                adapterId,
-                D3DDEVTYPE_HAL,
-                devParames.hFocusWindow,
-                D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED | D3DCREATE_FPU_PRESERVE,
-                &d3dParams,
-                &m_pD3dDevice);
-
-            if (FAILED(hr) || !m_pD3dDevice)
-            {
-                hr = E_FAIL;
-                MSDK_TRACE("QsDecoder: InitD3d CreateDevice failed!\n");
-                goto done;
-            }
-
-            // Create device manager            
-            hr = DXVA2CreateDirect3DDeviceManager9(&m_ResetToken, &m_pD3dDeviceManager);
-            if (FAILED(hr) || !m_pD3dDeviceManager)
-            {
-                hr = E_FAIL;
-                MSDK_TRACE("QsDecoder: InitD3d DXVA2CreateDirect3DDeviceManager9 failed!\n");
-                goto done;
-            }
-
-            // Reset the d3d device
-            hr = m_pD3dDeviceManager->ResetDevice(m_pD3dDevice, m_ResetToken);
-            if (FAILED(hr))
-            {
-                hr = E_FAIL;
-                MSDK_TRACE("QsDecoder: InitD3d ResetDevice failed!\n");
-                goto done;
-            }
-
-            // Cleanup
-done:
-            if (FAILED(hr))
-            {
-                sts = MFX_ERR_DEVICE_FAILED;
-            }
-
-            MSDK_SAFE_RELEASE(pDevice);
-            if (hDevice != NULL)
-            {
-                m_pRendererD3dDeviceManager->UnlockDevice(hDevice, FALSE);
-                m_pRendererD3dDeviceManager->CloseDeviceHandle(&hDevice);
-            }
-
-            sts = MFX_ERR_NONE;
+            sts = InitD3DFromRenderer();
         }
         else
         {
@@ -789,4 +794,13 @@ unsigned CQuickSyncDecoder::DecoderWorkerThreadMsgLoop()
 
     // All's well
     return 0;
+}
+
+void CQuickSyncDecoder::SetAuxFramesCount(size_t count)
+{
+    if (m_nAuxFrameCount != count)
+    {
+        m_nAuxFrameCount = (mfxU16)count;
+        FreeFrameAllocator();
+    }
 }
