@@ -161,11 +161,7 @@ public:
         m_AsyncDecodeInfo.lock.Wait(INFINITE);
     }
 
-    void SetAuxFramesCount(size_t count)
-    {
-        m_nAuxFrameCount = (mfxU16)count;
-    }
-
+    void SetAuxFramesCount(size_t count);
     mfxFrameSurface1* FindFreeSurface();
     inline MFXVideoSession* GetSession()
     {
@@ -177,6 +173,7 @@ protected:
     mfxStatus         InitSession(mfxIMPL impl);
     void              CloseSession();
     mfxStatus         InitD3D();
+    mfxStatus         InitD3DFromRenderer();
     void              CloseD3D();
     unsigned          DecoderWorkerThreadMsgLoop();
 

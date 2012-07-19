@@ -415,6 +415,14 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 {
     MSDK_TRACE("QsDecoder: InitDecoder\n");
     CQsAutoLock cObjectLock(&m_csLock);
+
+    // 2nd initialization - empty queues and kill VPP
+    if (m_bInitialized)
+    {
+        OnSeek(0);
+        MSDK_ZERO_VAR(m_DecVideoParams.mfx.FrameInfo);
+    }
+
     m_bNeedToFlush = true;
     m_bInitialized = true;
 
@@ -430,6 +438,8 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     if (!(mtIn->majortype == MEDIATYPE_DVD_ENCRYPTED_PACK || mtIn->majortype == MEDIATYPE_Video))
         return VFW_E_INVALIDMEDIATYPE;
 
+    // Delete frame constructor from previous run
+    MSDK_SAFE_DELETE(m_pFrameConstructor);
     hr = DecodeHeader(mtIn, fourCC, m_pFrameConstructor, vih2, nSampleSize, nVideoInfoSize, m_DecVideoParams);
 
     // Setup frame rate from either the media type or the decoded header
@@ -490,12 +500,12 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
         if (m_Config.nVppDetailStrength > 0)
         {
-            MSDK_TRACE("QsDecoder: detail filter is at %i%%\n", 100 * m_Config.nVppDetailStrength / 64);
+            MSDK_TRACE("QsDecoder: detail filter is at %i%%\n", (32 + 100 * m_Config.nVppDetailStrength) / 64);
         }
 
         if (m_Config.nVppDenoiseStrength > 0)
         {
-            MSDK_TRACE("QsDecoder: denoise filter is at %i%%\n", 100 * m_Config.nVppDenoiseStrength / 64);
+            MSDK_TRACE("QsDecoder: denoise filter is at %i%%\n", (32 + 100 * m_Config.nVppDenoiseStrength) / 64);
         }
     }
     // Make sure all VPP features are disabled
@@ -524,7 +534,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     }
 
     // Create worker thread
-    if (m_Config.bEnableMtProcessing)
+    if (m_Config.bEnableMtProcessing && (NULL == m_hProcessorWorkerThread))
     {
         m_hProcessorWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &ProcessorWorkerThreadProc, this, 0, &m_ProcessorWorkerThreadId);
     }
@@ -532,15 +542,18 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     // Fill free frames pool
     {
         size_t queueCapacity = m_FreeFramesPool.GetCapacity();
-        for (unsigned i = 0; i < queueCapacity; ++i)
+        if (m_FreeFramesPool.Empty())
         {
-            TQsQueueItem item(new QsFrameData, new CQsAlignedBuffer(0));
-            m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
+            for (unsigned i = 0; i < queueCapacity; ++i)
+            {
+                TQsQueueItem item(new QsFrameData, new CQsAlignedBuffer(0));
+                m_FreeFramesPool.PushBack(item, 0); // No need to wait - we know there's room
+            }
         }
     }
 
-    // Init Media SDK decoder is done in OnSeek to allow late initialization needed
-    // by full screen exclusive mode since D3D devices can't be created. The DS filter must send
+    // Initialization of Media SDK decoder is done in OnSeek to allow late initialization needed
+    // by full screen exclusive (FSE) mode since D3D devices can't be created. The DS filter must send
     // the D3D device manager to this decoder for surface allocation.
     if (sts == MFX_ERR_NONE)
     {
@@ -1117,10 +1130,20 @@ void CQuickSync::GetConfig(CQsConfig* pConfig)
 void CQuickSync::SetConfig(CQsConfig* pConfig)
 {
     if (NULL == pConfig)
+    {
+        MSDK_TRACE("QsDecoder: SetConfig was called with a NULL parameter\n");
         return;
+    }
 
+    CQsAutoLock cObjectLock(&m_csLock);
+
+    // 2nd initialization - empty queues and kill VPP
     if (m_bInitialized)
-        return;
+    {
+        OnSeek(0);
+        m_bInitialized = false;
+        MSDK_ZERO_VAR(m_DecVideoParams.mfx.FrameInfo);
+    }
 
     m_Config = *pConfig;
 }
@@ -1367,16 +1390,10 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
             }
         }
 
+        // Note: this flag is not very reliable - don't take any action because of it
         if (pOutSurface->Data.Corrupted)
         {
-            MSDK_TRACE("QsDecoder: warning received a corrupted frame\n");
-
-            // Discard corrupted frames at the start of a sequence
-            // Speeds up seeking 
-            if (0 == m_nSegmentFrameCount)
-            {
-                bDiscardFrame = true;
-            }
+            MSDK_VTRACE("QsDecoder: warning received a corrupted frame\n");
         }
 
         // If input frame was meant to be discarded then we still want to VPP to work -

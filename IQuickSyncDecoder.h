@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.36 Beta"
+#define QS_DEC_VERSION  "v0.37 Beta"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
