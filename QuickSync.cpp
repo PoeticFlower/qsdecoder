@@ -381,10 +381,12 @@ HRESULT CQuickSync::DecodeHeader(
         if (MFX_ERR_NONE == sts)
         {
             sts = m_pDecoder->DecodeHeader(&pFrameConstructor->GetHeaders(), &videoParams);
+//            ASSERT(sts == MFX_ERR_NONE);
         }
     }
-    // Simple info header (without extra data) or DecodeHeader failed (usually not critical)
-    else
+    
+    // Simple info header (without extra data) or DecodeHeader failed (usually not critical, in many cases header will appear later in the stream)
+    if (nVideoInfoSize == nSampleSize || sts != MFX_ERR_NONE)
     {
         mfx.FrameInfo.CropW        = (mfxU16)vih2->bmiHeader.biWidth;
         mfx.FrameInfo.CropH        = (mfxU16)vih2->bmiHeader.biHeight;
@@ -395,6 +397,8 @@ HRESULT CQuickSync::DecodeHeader(
         ConvertFrameRate((vih2->AvgTimePerFrame) ? 1e7 / vih2->AvgTimePerFrame : 0, 
             mfx.FrameInfo.FrameRateExtN, 
             mfx.FrameInfo.FrameRateExtD);
+
+        sts = MFX_ERR_NONE;
     }
 
     hr = (sts == MFX_ERR_NONE) ? S_OK : E_FAIL;
