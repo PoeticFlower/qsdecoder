@@ -381,7 +381,11 @@ HRESULT CQuickSync::DecodeHeader(
         if (MFX_ERR_NONE == sts)
         {
             sts = m_pDecoder->DecodeHeader(&pFrameConstructor->GetHeaders(), &videoParams);
+            if (sts != MFX_ERR_NONE)
+            {
+                MSDK_TRACE("QsDecoder: Warning DecodeHeader failed!\n");
 //            ASSERT(sts == MFX_ERR_NONE);
+            }
         }
     }
     
