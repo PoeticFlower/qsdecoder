@@ -397,6 +397,17 @@ HRESULT CQuickSync::DecodeHeader(
         ConvertFrameRate((vih2->AvgTimePerFrame) ? 1e7 / vih2->AvgTimePerFrame : 0, 
             mfx.FrameInfo.FrameRateExtN, 
             mfx.FrameInfo.FrameRateExtD);
+        
+        // Get codec/profile from MPEG2VIDEOINFO header
+        if (nVideoInfoSize == sizeof(MPEG2VIDEOINFO))
+        {
+            MPEG2VIDEOINFO* mp2 = (MPEG2VIDEOINFO*)(vih2);
+            if (mfx.CodecId == MFX_CODEC_AVC)
+            {
+                mfx.CodecProfile = (mfxU16)mp2->dwProfile;
+                mfx.CodecLevel   = (mfxU16)mp2->dwLevel;
+            }
+        }
 
         sts = MFX_ERR_NONE;
     }
@@ -742,6 +753,10 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
 
             MSDK_TRACE("QsDecoder: Decode didn't recover from MFX_ERR_INCOMPATIBLE_VIDEO_PARAM\n");
         }
+        else
+        {
+            MSDK_TRACE("QsDecoder: Device failed!\n");
+        }
 
         // The decoder has returned with an error
         hr = E_FAIL;
@@ -852,7 +867,7 @@ mfxStatus CQuickSync::ConvertFrameRate(mfxF64 dFrameRate, mfxU32& nFrameRateExtN
     if (fabs(fr - dFrameRate) < 0.0001) 
     {
         nFrameRateExtN = fr;
-        nFrameRateExtD = 1;
+        nFrameRateExtD = (nFrameRateExtN) ? 1 : 0;
         return MFX_ERR_NONE;
     }
 
