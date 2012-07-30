@@ -230,6 +230,7 @@ bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
                 // Check if the lowest timetamp is very far (100ms) than the expected timestamp
                 if (abs(rtTemp - rtStart) > 1000000)
                 {
+                    MSDK_TRACE("QsDecoder: Warning detected long time stamp gap!\n");
                     rtStart = rtTemp;
                     m_OutputTimeStamps.erase(it);
                 }
