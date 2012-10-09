@@ -637,13 +637,29 @@ mfxStatus CQuickSyncDecoder::DecodeHeader(mfxBitstream* bs, mfxVideoParam* par)
     mfxStatus sts = m_pmfxDEC->DecodeHeader(bs, par);
 
     // Try again, marking the bitstream as complete
-    // This workaround should work on all driver versions.
+    // This workaround should work on all driver versions. But it doesn't work on 15.28 & 15.31
     if (MFX_ERR_MORE_DATA == sts)
     {
         mfxU16 oldFlag = bs->DataFlag;
         bs->DataFlag = MFX_BITSTREAM_COMPLETE_FRAME;
         sts = m_pmfxDEC->DecodeHeader(bs, par);
         bs->DataFlag = oldFlag;
+    }
+
+    // Another workaround for 15.28 and 15.31 drivers
+    if (MFX_ERR_MORE_DATA == sts && par->mfx.CodecId == MFX_CODEC_AVC)
+    {
+        mfxBitstream bs2 = *bs;
+        
+        bs2.Data = new mfxU8[bs->DataLength + 5];
+        memcpy(bs2.Data, bs->Data + bs->DataOffset, bs->DataLength - bs->DataOffset);
+        bs2.MaxLength = bs2.DataLength = bs->DataLength + 5 - bs->DataOffset;
+
+        // Write H264 start code + start of splice section
+        *((unsigned*)(bs2.Data + bs2.DataLength - 5)) = 0x01000000;
+        bs2.Data[bs2.DataLength -1]                = 1; // write SPLICE NALU
+        sts = m_pmfxDEC->DecodeHeader(&bs2, par);
+        delete[] bs2.Data; // Cleanup
     }
 
     MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
