@@ -87,8 +87,8 @@ CQuickSync::CQuickSync() :
     m_Config.bEnableWMV9  = true;
 
     m_Config.bEnableMultithreading = true;
-    m_Config.bEnableMtProcessing   = m_Config.bEnableMultithreading;
-    m_Config.bEnableMtDecode       = m_Config.bEnableMultithreading;
+//    m_Config.bEnableMtProcessing   = m_Config.bEnableMultithreading;
+//    m_Config.bEnableMtDecode       = m_Config.bEnableMultithreading;
     m_Config.bEnableMtCopy         = m_Config.bEnableMultithreading;
 
     // For testing purposes only - menus are not handled well
