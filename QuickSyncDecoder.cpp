@@ -507,7 +507,6 @@ mfxStatus CQuickSyncDecoder::InitD3DFromRenderer()
     IDirect3DDevice9* pDevice = NULL;
     CComPtr<IDirect3D9> pD3D;
     D3DDEVICE_CREATION_PARAMETERS devParames;
-    D3DADAPTER_IDENTIFIER9 adIdentifier;
     D3DPRESENT_PARAMETERS d3dParams = {1, 1, D3DFMT_X8R8G8B8, 1, D3DMULTISAMPLE_NONE, 0, D3DSWAPEFFECT_DISCARD, NULL, TRUE, FALSE, D3DFMT_UNKNOWN, 0, 0, D3DPRESENT_INTERVAL_IMMEDIATE};
     mfxStatus sts = MFX_ERR_NONE;
 
@@ -535,20 +534,6 @@ mfxStatus CQuickSyncDecoder::InitD3DFromRenderer()
     if (FAILED(hr))
     {
         MSDK_TRACE("QsDecoder: failed to get device creation params!\n");
-        goto done;
-    }
-
-    hr = pD3D->GetAdapterIdentifier(devParames.AdapterOrdinal, 0, &adIdentifier);
-    if (FAILED(hr))
-    {
-        MSDK_TRACE("QsDecoder: failed to get adapter identifier!\n");
-        goto done;
-    }
-
-    // If renderer is already on Intel's GPU than we can reuse the device.
-    if (adIdentifier.VendorId == 0x8086) // Intel's vendor ID  is 8086h
-    {
-        m_pD3dDeviceManager = m_pRendererD3dDeviceManager;
         goto done;
     }
 
