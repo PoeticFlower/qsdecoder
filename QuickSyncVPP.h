@@ -45,6 +45,9 @@ public:
     void EnableDI(bool bEnable);
     __forceinline void LockSurface(mfxFrameSurface1* pSurface)
     {
+        ASSERT(pSurface != NULL);
+        if (NULL == pSurface) return;
+
         size_t i = pSurface - m_pFrameSurfaces;
         ASSERT(i < m_nRequiredFramesNum);
 
@@ -57,7 +60,10 @@ public:
     __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
     {
         ASSERT(pSurface != NULL);
+        if (NULL == pSurface) return;
+
         size_t i = pSurface - m_pFrameSurfaces;
+        ASSERT(i < m_nRequiredFramesNum);
 
         if (i < m_nRequiredFramesNum)
         {
@@ -69,6 +75,8 @@ public:
     __forceinline bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
     {
         ASSERT(pSurface != NULL);
+        if (NULL == pSurface) return true;
+
         size_t i = pSurface - m_pFrameSurfaces;
         ASSERT(i < m_nRequiredFramesNum);
         return (i < m_nRequiredFramesNum) ? (m_LockedSurfaces[i] > 0 || pSurface->Data.Locked > 0) : true;

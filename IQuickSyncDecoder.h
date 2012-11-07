@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.39 Beta"
+#define QS_DEC_VERSION  "v0.40"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -44,7 +44,9 @@ enum QsCaps
     QS_CAP_DEINTERLACING    = 4,
     QS_CAP_DETAIL           = 8,
     QS_CAP_DENOISE          = 16,
-    QS_CAP_PROCAMP          = 32
+    QS_CAP_PROCAMP          = 32,
+    QS_CAP_SCALING          = 64,
+    QS_CAP_DX11
 };
 
 enum QsFieldOrder
@@ -122,8 +124,8 @@ struct CQsConfig
             bool     bTimeStampCorrection   :  1; // when true time stamp will be generated.
                                                   // when false -> DS filter will do this.
             bool     bEnableMtCopy          :  1; // enables MT frame copy
-            bool     bEnableMtDecode        :  1; // decode on a worker thread
-            bool     bEnableMtProcessing    :  1; // perform post decode processing on another thread
+            bool     depr_bEnableMtDecode     :  1; // depracated
+            bool     depr_bEnableMtProcessing :  1; // depracated
             bool     bEnableVideoProcessing :  1;
             bool     bEnableSwEmulation     :  1; // When true, a SW version of the decoder will be used (if possible) if HW fails
             bool     bForceFieldOrder       :  1; // When true decoder interlacing flags are overwriten

@@ -31,13 +31,15 @@
 #include "CodecInfo.h"
 #include "QuickSyncUtils.h"
 
-// gpu_memcpy is a memcpy style function that copied data very fast from a
-// GPU tiled memory (write back)
+static bool s_SSE4_1_enabled = IsSSE41Enabled();
+static bool s_AVX2_enabled = IsAVX2Enabled();
+
+// gpu_memcpy_sse41 is a memcpy style function that copied data very fast from a
+// GPU tiled memory (uncached speculative write back memory)
 // Performance tip: page offset (12 lsb) of both addresses should be different
 //  optimally use a 2K offset between them.
-void* gpu_memcpy(void* d, const void* s, size_t size)
+void* gpu_memcpy_sse41(void* d, const void* s, size_t size)
 {
-    static bool s_SSE4_1_enabled = IsSSE41Enabled();
     static const size_t regsInLoop = 2;
 
     if (d == NULL || s == NULL) return NULL;
@@ -69,6 +71,9 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
         pSrc += regsInLoop;
 
         // _mm_store_si128 emit the SSE2 intruction MOVDQA (aligned store)
+        // Note a streaming store instruction (bypass L3 cache) will probably be faster in synthetic
+        // benchmarks but slower in real world usage as the buffer will be used by the application soon
+        // and better keep the L3 cache hot.
         _mm_store_si128(pTrg     , xmm0);
         _mm_store_si128(pTrg +  1, xmm1);
         _mm_store_si128(pTrg +  1, xmm1); // Not a bug - works 4.5% faster!
@@ -104,6 +109,80 @@ void* gpu_memcpy(void* d, const void* s, size_t size)
 
     return d;
 }
+
+// AVX2 copy function. Available since Haswell (4th Generation Core architecture) on premium models.
+#if defined (AVX2_ENABLED)
+void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
+{
+    // Must be exp of 2
+    static const size_t regsInLoop = 2; //TODO: need to tune this...
+
+    if (d == NULL || s == NULL) return NULL;
+
+    // If memory is not AVX aligned (32B), use gpu_memcpy_sse41 -->TODO: check actual performance hit
+    bool isAligned = (((size_t)(s) | (size_t)(d)) & 0x1F) == 0;
+    if (!(isAligned && s_SSE4_1_enabled))
+    {
+        return gpu_memcpy_sse41(d, s, size);
+    }
+
+    size_t reminder = size & (regsInLoop * sizeof(__m256i) - 1); // Copy 64 bytes every loop
+    size_t end = 0;
+
+    __m256i ymm0, ymm1; // Will actually use ymm registers
+    __m256i* pTrg = (__m256i*)d;
+    __m256i* pTrgEnd = pTrg + ((size - reminder) >> 5);
+    __m256i* pSrc = (__m256i*)s;
+    
+    // Make sure source is synced - doesn't hurt if not needed.
+    _mm_sfence();
+
+    while (pTrg < pTrgEnd)
+    {
+        // _mm256_stream_load_si256 emits the AVX2 instruction VMOVNTDQA
+        // Available since Haswell (22nm, 4th Generation Core)
+        ymm0  = _mm256_stream_load_si256(pSrc);
+        ymm1  = _mm256_stream_load_si256(pSrc + 1);
+        pSrc += regsInLoop;
+
+        // _mm256_store_si256 emit the AVX intruction VMOVDQA (aligned store)
+        // Note a streaming store instruction (bypass L3 cache) will probably be faster in synthetic
+        // benchmarks but slower in real world usage as the buffer will be used by the application soon
+        // and better keep the L3 cache hot.
+        _mm256_store_si256(pTrg     , ymm0);
+        _mm256_store_si256(pTrg +  1, ymm1);
+        pTrg += regsInLoop;
+    }
+
+    // Copy in 32 byte steps
+    if (reminder >= 32)
+    {
+        size = reminder;
+        reminder = size & 31;
+        end = size >> 5;
+        for (size_t i = 0; i < end; ++i)
+        {
+            pTrg[i] = _mm256_stream_load_si256(pSrc + i);
+        }
+    }
+
+    // Copy last bytes
+    if (reminder)
+    {
+        __m256i temp = _mm256_stream_load_si256(pSrc + end);
+
+        char* ps = (char*)(&temp);
+        char* pt = (char*)(pTrg + end);
+
+        for (size_t i = 0; i < reminder; ++i)
+        {
+            pt[i] = ps[i];
+        }
+    }
+
+    return d;
+}
+#endif // #if defined (AVX2_ENABLED)
 
 #pragma pack(push, 8)
 typedef struct tagTHREADNAME_INFO
@@ -337,12 +416,20 @@ const char* GetProfileName(DWORD codec, DWORD profile)
     return "Unknown";
 }
 
-bool IsSSE41Enabled()
+bool IsSSE41Enabled() // for MOVNTDQA instruction
 {
    int CPUInfo[4];
     __cpuid(CPUInfo, 1);
 
     return 0 != (CPUInfo[2] & (1<<19)); // 19th bit of 2nd reg means sse4.1 is enabled
+}
+
+bool IsAVX2Enabled() // for VMOVNTDQA
+{
+   int CPUInfo[4];
+    __cpuid(CPUInfo, 7);
+
+    return 0 != (CPUInfo[1] & (1<<5)); // 5th bit of 2nd reg means AVX2 is enabled
 }
 
 #define MIN_BUFF_SIZE (1 << 18)
@@ -377,5 +464,5 @@ void* mt_memcpy(void* d, const void* s, size_t size)
 
 void* mt_gpu_memcpy(void* d, const void* s, size_t size)
 {
-    return mt_copy(d, s, size, gpu_memcpy);
+    return mt_copy(d, s, size, gpu_memcpy_sse41);
 }

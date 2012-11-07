@@ -26,6 +26,32 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+//
+// FourCC
+//
+
+// VC1
+#define FOURCC_VC1  mmioFOURCC('W','V','C','1')
+#define FOURCC_WMV3 mmioFOURCC('W','M','V','3')
+
+//MPEG2
+#define FOURCC_mpg2 mmioFOURCC('m','p','g','2')
+#define FOURCC_MPG2 mmioFOURCC('M','P','G','2')
+
+//H264
+#define FOURCC_H264 mmioFOURCC('H','2','6','4')
+#define FOURCC_X264 mmioFOURCC('X','2','6','4')
+#define FOURCC_h264 mmioFOURCC('h','2','6','4')
+#define FOURCC_avc1 mmioFOURCC('a','v','c','1')
+#define FOURCC_VSSH mmioFOURCC('V','S','S','H')
+#define FOURCC_DAVC mmioFOURCC('D','A','V','C')
+#define FOURCC_PAVC mmioFOURCC('P','A','V','C')
+#define FOURCC_AVC1 mmioFOURCC('A','V','C','1')
+#define FOURCC_CCV1 mmioFOURCC('C','C','V','1')
+
+// Output formats
+#define FOURCC_NV12 mmioFOURCC('N','V','1','2')
+
 enum
 {
     QS_PROFILE_MPEG2_422                = 0, /* 4:2:2 or 4:2:0 */

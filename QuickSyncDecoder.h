@@ -32,14 +32,6 @@
 #include "sysmem_allocator.h"
 
 typedef std::deque<mfxFrameSurface1*> TSurfaceQueue;
-typedef void (*TDecodeComplete)(mfxFrameSurface1* pSurface, void* obj);
-
-struct TAsyncDecodeInfo
-{
-    mfxFrameSurface1* pSurface;
-    mfxSyncPoint syncPoint;
-    CQsEvent lock;
-};
 
 class CQuickSyncDecoder 
 {
@@ -57,7 +49,7 @@ public:
         return InternalReset(pVideoParams, nPitch, true);     
     }
 
-    mfxStatus Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurface1*& pOutSurface);
+    mfxStatus Decode(mfxBitstream* pBS, mfxFrameSurface1*& pOutSurface);
     mfxStatus GetVideoParams(mfxVideoParam* pVideoParams);
     IDirect3DDeviceManager9* GetD3DDeviceManager()
     {
@@ -116,6 +108,9 @@ public:
 
     __forceinline void LockSurface(mfxFrameSurface1* pSurface)
     {
+        ASSERT(pSurface != NULL);
+        if (NULL == pSurface) return;
+
         size_t i = pSurface - m_pFrameSurfaces;
         ASSERT(i < m_nRequiredFramesNum);
 
@@ -128,6 +123,8 @@ public:
     __forceinline void UnlockSurface(mfxFrameSurface1* pSurface)
     {
         ASSERT(pSurface != NULL);
+        if (NULL == pSurface) return;
+
         size_t i = pSurface - m_pFrameSurfaces;
 
         if (i < m_nRequiredFramesNum)
@@ -140,6 +137,8 @@ public:
     __forceinline bool IsSurfaceLocked(mfxFrameSurface1* pSurface)
     {
         ASSERT(pSurface != NULL);
+        if (NULL == pSurface) return true;
+
         size_t i = pSurface - m_pFrameSurfaces;
         ASSERT(i < m_nRequiredFramesNum);
         return (i < m_nRequiredFramesNum) ? (m_LockedSurfaces[i] > 0 || pSurface->Data.Locked > 0) : true;
@@ -150,16 +149,6 @@ public:
 
     mfxStatus LockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
     mfxStatus UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
-    void SetOnDecodeComplete(TDecodeComplete func, void * obj)
-    {
-        m_OnDecodeComplete = func;
-        m_Parent = obj;
-    }
-
-    __forceinline void WaitForDecoder()
-    {
-        m_AsyncDecodeInfo.lock.Wait(INFINITE);
-    }
 
     void SetAuxFramesCount(size_t count);
     mfxFrameSurface1* FindFreeSurface();
@@ -175,10 +164,6 @@ protected:
     mfxStatus         InitD3D();
     mfxStatus         InitD3DFromRenderer();
     void              CloseD3D();
-    unsigned          DecoderWorkerThreadMsgLoop();
-
-    // statics
-    static unsigned  __stdcall DecoderWorkerThreadProc(void* pThis);
 
 // data members
     // session
@@ -206,15 +191,8 @@ protected:
     IDirect3DDevice9*        m_pD3dDevice;
     UINT                     m_ResetToken;
 
-    // Async decoder
-    HANDLE              m_hDecoderWorkerThread;
-    unsigned            m_DecoderWorkerThreadId;
-    TAsyncDecodeInfo    m_AsyncDecodeInfo;
-    TDecodeComplete     m_OnDecodeComplete; // Callback for async decode
-    void*               m_Parent;
-
-    TSurfaceQueue       m_OutputSurfaceQueue;
-    volatile LONG       m_LockedSurfaces[MAX_SURFACES];
+    TSurfaceQueue m_OutputSurfaceQueue;
+    volatile LONG m_LockedSurfaces[MAX_SURFACES];
 
     // Various locks
     CQsLock m_csOutputQueueLock;

@@ -29,6 +29,7 @@
 #include "stdafx.h"
 #include "QuickSync_defs.h"
 #include "QuickSyncUtils.h"
+#include "CodecInfo.h"
 #include "TimeManager.h"
 #include "frame_constructors.h"
 #include "H264Nalu.h"

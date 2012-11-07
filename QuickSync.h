@@ -85,10 +85,8 @@ protected:
     virtual void SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
     HRESULT HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxVideoParam& videoParams, CFrameConstructor*& pFrameContructor);
     HRESULT CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize);
-    HRESULT QueueSurface(mfxFrameSurface1* pSurface, bool async);
     HRESULT ProcessDecodedFrame(mfxFrameSurface1* pOutSurface);
-    void    ClearQueue();
-    int DeliverSurface(bool bWaitForCompletion);
+    void DeliverSurface();
     virtual void SetDeliverSurfaceCallback(void* obj, TQS_DeliverSurfaceCallback func)
     {
         CQsAutoLock cObjectLock(&m_csLock);
@@ -113,10 +111,6 @@ protected:
     unsigned ProcessorWorkerThreadMsgLoop();
     void CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, CQsAlignedBuffer*& pOutBuffer);
 
-    // Static methods
-    static void OnDecodeComplete(mfxFrameSurface1* pSurface, void* obj);
-    static unsigned  __stdcall ProcessorWorkerThreadProc(void* pThis);
-
     // Data members
     bool m_OK;
     bool m_bInitialized; // Becomes true after calling InitDecoder. Afterwards SetConfig will silently fail.
@@ -134,13 +128,8 @@ protected:
     volatile bool       m_bNeedToFlush;            // A flush was seen but not handled yet
     bool                m_bDvdDecoding;            // Current media is DVD
     CQsConfig           m_Config;                  // Global config
-    HANDLE              m_hProcessorWorkerThread;   
-    unsigned            m_ProcessorWorkerThreadId;
     mfxU32              m_PicStruct;
 
     typedef std::pair<QsFrameData*, CQsAlignedBuffer*> TQsQueueItem;
-
-    CQsThreadSafeQueue<mfxFrameSurface1*> m_DecodedFramesQueue;
-    CQsThreadSafeQueue<TQsQueueItem> m_ProcessedFramesQueue; // Holds frame buffers after processing
-    CQsThreadSafeQueue<TQsQueueItem> m_FreeFramesPool;       // Holds free frame buffers
+    TQsQueueItem m_ProcessedFrame;
 };

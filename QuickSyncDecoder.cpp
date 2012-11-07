@@ -64,10 +64,7 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
     m_pRendererD3dDeviceManager(NULL),
     m_pD3dDeviceManager(NULL),
     m_pD3dDevice(NULL),
-    m_ResetToken(0),
-    m_hDecoderWorkerThread(NULL),
-    m_DecoderWorkerThreadId(0),
-    m_OnDecodeComplete(NULL)
+    m_ResetToken(0)
 {
     MSDK_ZERO_VAR(m_AllocResponse);
 
@@ -83,14 +80,6 @@ CQuickSyncDecoder::CQuickSyncDecoder(mfxStatus& sts) :
 
 CQuickSyncDecoder::~CQuickSyncDecoder()
 {
-    // Wait for the worker thread to finish
-    if (m_DecoderWorkerThreadId)
-    {
-        PostThreadMessage(m_DecoderWorkerThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(m_hDecoderWorkerThread, INFINITE);
-        CloseHandle(m_hDecoderWorkerThread);
-    }
-
     CloseSession();
 
     FreeFrameAllocator();
@@ -238,12 +227,6 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     mfxStatus sts = MFX_ERR_NONE;
     m_pVideoParams = pVideoParams;
 
-    // Create worker thread
-    if (m_Config.bEnableMtDecode && m_hDecoderWorkerThread == NULL)
-    {
-        m_hDecoderWorkerThread = (HANDLE)_beginthreadex(NULL, 0, &DecoderWorkerThreadProc, this, 0, &m_DecoderWorkerThreadId);
-    }
-
     if (NULL == m_pFrameAllocator)
     {
         bInited = false;
@@ -356,11 +339,9 @@ mfxStatus CQuickSyncDecoder::GetVideoParams(mfxVideoParam* pVideoParams)
     return m_pmfxDEC->GetVideoParam(pVideoParams);
 }
 
-mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurface1*& pOutSurface)
+mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, mfxFrameSurface1*& pOutSurface)
 {
     MSDK_CHECK_POINTER(m_pmfxDEC, MFX_ERR_NOT_INITIALIZED);    
-
-    WaitForDecoder();
 
     mfxStatus sts = MFX_ERR_NONE;
     mfxSyncPoint syncp;
@@ -386,30 +367,13 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, bool bAsync, mfxFrameSurf
     // Output will be shortly available
     if (MFX_ERR_NONE == sts) 
     {
-        if (m_Config.bEnableMtDecode && bAsync)
-        {
-            // Turn event to non signalled (locked)
-            // The state will change to signalled after the worker thread has finished decoding
-            m_AsyncDecodeInfo.lock.Lock();
-            m_AsyncDecodeInfo.pSurface = pOutSurface;
-            m_AsyncDecodeInfo.syncPoint = syncp;
+        // Wait for the asynch decoding to finish
+        sts = m_mfxVideoSession->SyncOperation(syncp, 0xFFFF);
 
+        if (MFX_ERR_NONE == sts)
+        {
             // The surface is locked from being reused in another Decode call
             LockSurface(pOutSurface);
-
-            PostThreadMessage(m_DecoderWorkerThreadId, TM_DECODE_FRAME, 0, 0);
-            pOutSurface = NULL; // Return pOutSurface only in sync mode
-        }
-        else
-        {
-            // Wait for the asynch decoding to finish
-            sts = m_mfxVideoSession->SyncOperation(syncp, 0xFFFF);
-
-            if (MFX_ERR_NONE == sts)
-            {
-                // The surface is locked from being reused in another Decode call
-                LockSurface(pOutSurface);
-            }
         }
     }
 
@@ -659,6 +623,9 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
     MSDK_TRACE("QsDecoder: CreateAllocator\n");
 
     ASSERT(m_pVideoParams != NULL);
+    if (NULL == m_pVideoParams)
+        return MFX_ERR_NOT_INITIALIZED;
+
     std::auto_ptr<D3DAllocatorParams> pParam(NULL);
     mfxStatus sts = MFX_ERR_NONE;
 
@@ -743,58 +710,6 @@ bool CQuickSyncDecoder::SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceMana
     MSDK_TRACE("QsDecoder: SetD3DDeviceManager called\n");
     m_pRendererD3dDeviceManager = pDeviceManager;
     return true;
-}
-
-unsigned CQuickSyncDecoder::DecoderWorkerThreadProc(void* pThis)
-{
-    ASSERT(pThis != NULL);
-    if (NULL == pThis)
-        return 1;
-
-    return static_cast<CQuickSyncDecoder*>(pThis)->DecoderWorkerThreadMsgLoop();
-}
-
-unsigned CQuickSyncDecoder::DecoderWorkerThreadMsgLoop()
-{
-#ifdef _DEBUG
-    SetThreadName("*** QS decoder WT ***");
-#endif
-
-    BOOL bRet;
-
-    // Note: GetMessage returns zero on WM_QUIT
-    MSG msg;
-    while ((bRet = GetMessage(&msg, (HWND)-1, 0, 0 )) != 0)
-    {
-        // Error
-        if (bRet == -1)
-        {
-            return (unsigned) bRet;
-        }
-
-        // Ignore WM_NULL messages
-        if (WM_NULL == msg.message)
-            continue;
-
-        if (TM_DECODE_FRAME == msg.message)
-        {
-            ASSERT(NULL != m_AsyncDecodeInfo.pSurface);
-            ASSERT(NULL != m_AsyncDecodeInfo.syncPoint);
-
-            // Wait for the asynch decoding to finish
-            mfxStatus sts = m_mfxVideoSession->SyncOperation(m_AsyncDecodeInfo.syncPoint, 0xFFFF);
-            if (sts == MFX_ERR_NONE)
-            {
-                ASSERT(m_OnDecodeComplete != NULL && m_Parent != NULL);
-                m_OnDecodeComplete(m_AsyncDecodeInfo.pSurface, m_Parent);
-            }
-
-            m_AsyncDecodeInfo.lock.Unlock();
-        }
-    }
-
-    // All's well
-    return 0;
 }
 
 void CQuickSyncDecoder::SetAuxFramesCount(size_t count)
