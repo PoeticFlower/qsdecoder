@@ -29,22 +29,30 @@
 #pragma once
 
 // SSE4.1 based memcpy that copies from video memory to system memory
-void* gpu_memcpy(void* d, const void* s, size_t _size);
+void* gpu_memcpy_sse41(void* d, const void* s, size_t _size);
 void* mt_memcpy(void* d, const void* s, size_t size);
 void* mt_gpu_memcpy(void* d, const void* s, size_t size);
 
 // Finds greatest common divider
 mfxU32 GCD(mfxU32 a, mfxU32 b);
+
 // Pixel Aspect Ratio to Display Aspect Ratio conversion
 mfxStatus PARtoDAR(DWORD parw, DWORD parh, DWORD w, DWORD h, DWORD& darw, DWORD& darh);
+
 // Display Aspect Ratio to Pixel Aspect Ratio conversion
 mfxStatus DARtoPAR(mfxU32 darw, mfxU32 darh, mfxU32 w, mfxU32 h, mfxU16& parw, mfxU16& parh);
+
 // Name from codec identifier (MSDK enum)
 const char* GetCodecName(DWORD codec);
+
 // Name of codec's profile - profile identifier is accoding to DirectShow
 const char* GetProfileName(DWORD codec, DWORD profile);
 
+// Returns true when running on SSE4.1 HW - Intel Penryn or newer.
 bool IsSSE41Enabled();
+
+// Returns true when running on AVX2 HW - Intel 4th generation Core (Haswell) or newer
+bool IsAVX2Enabled();
 
 // Set current thread name in VS debugger
 void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID = -1 /* current thread */);
@@ -55,12 +63,6 @@ void DebugAssert(const TCHAR *pCondition,const TCHAR *pFileName, int iLine);
 #endif
 
 typedef void* (*Tmemcpy)(void*, const void*, size_t);
-
-struct IQsTask
-{
-    virtual HRESULT RunTask(size_t taskId) = 0;
-    virtual size_t TaskCount() = 0;
-};
 
 // Wrapper for low level critical section
 class CQsLock
@@ -91,42 +93,6 @@ private:
     // Make copy constructor and assignment operator inaccessible
     DISALLOW_COPY_AND_ASSIGN(CQsLock)
     CRITICAL_SECTION m_CritSec;
-};
-
-class CQsEvent
-{
-public:
-    CQsEvent(bool bSignaled = true, bool bManual = true)
-    {
-        m_hEvent = CreateEvent(NULL, (BOOL)bManual, (BOOL)bSignaled, NULL);
-    }
-
-    __forceinline void Lock()
-    {
-        ResetEvent(m_hEvent);
-    }
-    __forceinline void Unlock()
-    {
-        SetEvent(m_hEvent);
-    }
-
-    bool Wait(DWORD dwMilliseconds = INFINITE)
-    {
-        DWORD rc = WaitForSingleObject(m_hEvent, dwMilliseconds);
-        if (rc == WAIT_OBJECT_0)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
-    ~CQsEvent() { if (m_hEvent) { CloseHandle(m_hEvent); } }
-
-private:
-    HANDLE m_hEvent;
 };
 
 // Locks a critical section, and unlocks it automatically
@@ -173,157 +139,6 @@ public:
 private:
     DISALLOW_COPY_AND_ASSIGN(CQsAutoUnlock);
     CQsLock* m_pLock;
-};
-
-// Thread safe queue template class
-// Has a fixed maximum capacity given at construction
-template<class T> class CQsThreadSafeQueue
-{
-public:
-    CQsThreadSafeQueue(size_t capacity) :
-      m_Buffer(new T[capacity]),
-      m_Capacity(capacity),
-      m_Size(0),
-      m_Offset(0)
-    {
-        InitializeConditionVariable(&m_BufferNotEmpty);
-        InitializeConditionVariable(&m_BufferNotFull);
-        InitializeCriticalSection(&m_csBufferLock);
-    }
-
-    ~CQsThreadSafeQueue()
-    {
-        EnterCriticalSection(&m_csBufferLock);
-        LeaveCriticalSection(&m_csBufferLock);
-        DeleteCriticalSection(&m_csBufferLock);
-    }
-
-    inline bool PushBack(const T& item, DWORD dwMiliSecs)
-    {
-        EnterCriticalSection(&m_csBufferLock);
-
-        while (m_Size == m_Capacity)
-        {
-            // Buffer is full - sleep so consumers can get items.
-            if (dwMiliSecs == 0 || !SleepConditionVariableCS(&m_BufferNotFull, &m_csBufferLock, dwMiliSecs))
-            {
-                // Release lock
-                LeaveCriticalSection(&m_csBufferLock);
-                return false;
-            }
-
-            ASSERT(m_Size < m_Capacity);
-        }
-       
-        // Insert the item at the end of the queue and increment size.
-        m_Buffer[(m_Offset + m_Size++) % m_Capacity] = item;
-
-        // See if there's a need to wake consumers up
-        bool bNeedtoWake = (m_Size == 1);
-
-        // Release lock
-        LeaveCriticalSection(&m_csBufferLock);
-
-        // If a consumer is waiting, wake it.
-        if (bNeedtoWake)
-        {
-            WakeConditionVariable(&m_BufferNotEmpty);
-        }
-
-        return true;
-    }
-
-    inline bool PopFront(T& res, DWORD dwMiliSecs)
-    {
-        EnterCriticalSection(&m_csBufferLock);
-
-        while (m_Size == 0)
-        {
-            // Buffer is empty - wait for it to become filled
-            if (dwMiliSecs == 0 || !SleepConditionVariableCS(&m_BufferNotEmpty, &m_csBufferLock, dwMiliSecs))
-            {
-                // Release lock
-                LeaveCriticalSection(&m_csBufferLock);
-                return false; //timeout
-            }
-
-            ASSERT(m_Size > 0);
-        }
-
-        // Pop item
-        res = m_Buffer[m_Offset];
-        --m_Size;
-
-        m_Offset = ++m_Offset % m_Capacity;
-
-        // See if there's a need to wake consumers up
-        bool bNeedToWake = m_Size == m_Capacity - 1;
-
-        // Release lock
-        LeaveCriticalSection(&m_csBufferLock);
-
-        // If a producer is waiting, wake it.
-        if (bNeedToWake)
-        {
-            WakeConditionVariable(&m_BufferNotFull);
-        }
-
-        return true;
-    }
-
-    __forceinline size_t Size() const { return m_Size; }
-
-    __forceinline size_t GetCapacity() const
-    {
-        return m_Capacity;
-    }
-
-    __forceinline bool Full() const { return m_Capacity == m_Size; }
-    __forceinline bool Empty() const { return 0 == m_Size; }
-
-    inline bool WaitForNotFull(DWORD dwMiliSecs)
-    {
-        EnterCriticalSection(&m_csBufferLock);
-        bool bSuccess = 0 != SleepConditionVariableCS(&m_BufferNotFull, &m_csBufferLock, dwMiliSecs);
-        LeaveCriticalSection(&m_csBufferLock);
-        return bSuccess;
-    }
-
-    inline bool WaitForNotEmpty(DWORD dwMiliSecs)
-    {
-        EnterCriticalSection(&m_csBufferLock);
-        bool bSuccess = 0 != SleepConditionVariableCS(&m_BufferNotEmpty, &m_csBufferLock, dwMiliSecs);
-        LeaveCriticalSection(&m_csBufferLock);
-        return bSuccess;
-    }
-
-    void SetCapacity(size_t capacity)
-    {
-        if (capacity <= m_Capacity)
-            return;
-
-        EnterCriticalSection(&m_csBufferLock);
-
-        T* pNewBuffer = new T[capacity];
-        for (size_t i = 0; i < m_Capacity; ++i)
-        {
-            pNewBuffer[i] = m_Buffer[i];
-        }
-        
-        delete[] m_Buffer;
-        m_Buffer = pNewBuffer;
-        m_Capacity = capacity;
-        LeaveCriticalSection(&m_csBufferLock);
-    }
-
-private:
-    T*                 m_Buffer;           // Array holding the FIFO items
-    size_t             m_Capacity;         // Max size
-    volatile size_t    m_Size;             // Current size
-    size_t             m_Offset;           // Start of buffer
-    CONDITION_VARIABLE m_BufferNotEmpty;   // Used for waiting till buffer is not empty
-    CONDITION_VARIABLE m_BufferNotFull;    // Used for waiting till buffer is not full
-    CRITICAL_SECTION   m_csBufferLock;     // Critical section used for all locking conditions
 };
 
 // Simple SSE friendly buffer class

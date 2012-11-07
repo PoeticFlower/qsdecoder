@@ -31,17 +31,11 @@
 // Uncomment for extra debug traces
 //#define VERBOSE
 
-#define TM_DECODE_FRAME  (WM_USER + 1)
-#define TM_PROCESS_FRAME (WM_USER + 2)
-
 // MSDK min version
 #define MIN_REQUIRED_API_VER_MINOR 1
 #define MIN_REQUIRED_API_VER_MAJOR 1
 
 #define MAX_SURFACES 256
-
-#define DECODE_QUEUE_LENGTH 16
-#define PROCESS_QUEUE_LENGTH 2
 
 #ifndef countof
 #   define countof(array) (size_t)(sizeof(array)/sizeof(array[0]))
@@ -100,45 +94,3 @@
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
     TypeName(const TypeName&);             \
     void operator=(const TypeName&);   
-
-//
-// FourCC
-//
-
-// VC1
-#define FOURCC_VC1  mmioFOURCC('W','V','C','1')
-#define FOURCC_WMV3 mmioFOURCC('W','M','V','3')
-
-//MPEG2
-#define FOURCC_mpg2 mmioFOURCC('m','p','g','2')
-#define FOURCC_MPG2 mmioFOURCC('M','P','G','2')
-
-//H264
-#define FOURCC_H264 mmioFOURCC('H','2','6','4')
-#define FOURCC_X264 mmioFOURCC('X','2','6','4')
-#define FOURCC_h264 mmioFOURCC('h','2','6','4')
-#define FOURCC_avc1 mmioFOURCC('a','v','c','1')
-#define FOURCC_VSSH mmioFOURCC('V','S','S','H')
-#define FOURCC_DAVC mmioFOURCC('D','A','V','C')
-#define FOURCC_PAVC mmioFOURCC('P','A','V','C')
-#define FOURCC_AVC1 mmioFOURCC('A','V','C','1')
-#define FOURCC_CCV1 mmioFOURCC('C','C','V','1')
-
-// Output formats
-#define FOURCC_NV12 mmioFOURCC('N','V','1','2')
-
-// compatibility with SDK v2.0
-#ifndef MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET
-#   define MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET MFX_MEMTYPE_DXVA2_DECODER_TARGET
-#endif
-
-#ifndef MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET
-#   define MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET MFX_MEMTYPE_DXVA2_PROCESSOR_TARGET
-#endif
-
-#ifndef MFX_HANDLE_D3D9_DEVICE_MANAGER
-#   define MFX_HANDLE_D3D9_DEVICE_MANAGER MFX_HANDLE_DIRECT3D_DEVICE_MANAGER9
-#endif
-
-//maximum amount of threads supported
-#define QS_MAX_CPU_CORES 8
