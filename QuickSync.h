@@ -86,7 +86,7 @@ protected:
     HRESULT HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxVideoParam& videoParams, CFrameConstructor*& pFrameContructor);
     HRESULT CopyMediaTypeToVIDEOINFOHEADER2(const AM_MEDIA_TYPE* mtIn, VIDEOINFOHEADER2*& vih2, size_t& nVideoInfoSize, size_t& nSampleSize);
     HRESULT ProcessDecodedFrame(mfxFrameSurface1* pOutSurface);
-    void DeliverSurface();
+    void DeliverSurface(mfxFrameSurface1* pSurface, int duplicates = 1);
     virtual void SetDeliverSurfaceCallback(void* obj, TQS_DeliverSurfaceCallback func)
     {
         CQsAutoLock cObjectLock(&m_csLock);
@@ -96,6 +96,11 @@ protected:
     virtual HRESULT OnSeek(REFERENCE_TIME segmentStart);
     virtual void GetConfig(CQsConfig* pConfig);
     virtual void SetConfig(CQsConfig* pConfig);
+    virtual void SetOutputSurfaceType(QsOutputSurfaceType surfaceType)
+    {
+        CQsAutoLock cObjectLock(&m_csLock);
+        m_SurfaceType = surfaceType;
+    }
 
     bool SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStart);
     void SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo);
@@ -109,7 +114,8 @@ protected:
     void FlushVPP();
     bool IsVppNeeded(mfxU32 picStruct);
     unsigned ProcessorWorkerThreadMsgLoop();
-    void CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, CQsAlignedBuffer*& pOutBuffer);
+    void CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, CQsAlignedBuffer*& pOutBuffer, mfxFrameData& frameData);
+    void CopyFramePointers(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, mfxFrameData& frameData);
 
     // Data members
     bool m_OK;
@@ -129,6 +135,7 @@ protected:
     bool                m_bDvdDecoding;            // Current media is DVD
     CQsConfig           m_Config;                  // Global config
     mfxU32              m_PicStruct;
+    QsOutputSurfaceType m_SurfaceType;
 
     typedef std::pair<QsFrameData*, CQsAlignedBuffer*> TQsQueueItem;
     TQsQueueItem m_ProcessedFrame;

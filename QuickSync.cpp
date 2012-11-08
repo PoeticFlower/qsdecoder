@@ -60,6 +60,7 @@ CQuickSync::CQuickSync() :
     m_bNeedToFlush(false),
     m_bDvdDecoding(false),
     m_PicStruct(0),
+    m_SurfaceType(QS_SURFACE_SYSTEM),
     m_ProcessedFrame(new QsFrameData, new CQsAlignedBuffer(0))
 {
     MSDK_TRACE("QsDecoder: Constructor\n");
@@ -102,6 +103,8 @@ CQuickSync::CQuickSync() :
 //    m_Config.bVppEnableForcedDeinterlacing = true;
 //    m_Config.nVppDetailStrength      = 16; // 0-64
 //    m_Config.nVppDenoiseStrength     = 16; // 0-64
+
+//    m_Config.bDropDuplicateFrames = true;
 
     m_OK = (sts == MFX_ERR_NONE);
 }
@@ -702,17 +705,90 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     return hr;
 }
 
-void CQuickSync::DeliverSurface()
+void CQuickSync::DeliverSurface(mfxFrameSurface1* pSurface, int duplicates)
 {
     MSDK_VTRACE("QsDecoder: DeliverSurface\n");
+    MSDK_CHECK_POINTER_NO_RET(pSurface);
 
-    if (!m_bNeedToFlush)
+    duplicates = min(1, duplicates);
+
+    QsFrameData& outFrameData = *m_ProcessedFrame.first;
+    CQsAlignedBuffer*& pOutBuffer = m_ProcessedFrame.second;
+
+    // Clear the outFrameData
+    MSDK_ZERO_VAR(outFrameData);
+
+    outFrameData.bCorrupted = pSurface->Data.Corrupted != 0;
+    UpdateAspectRatio(pSurface, outFrameData);
+    outFrameData.fourCC = pSurface->Info.FourCC;
+
+    // Setup interlacing info
+    PicStructToDsFlags(pSurface->Info.PicStruct, outFrameData.dwInterlaceFlags, outFrameData.frameStructure);
+    outFrameData.bFilm = 0 != (outFrameData.dwInterlaceFlags & AM_VIDEO_FLAG_REPEAT_FIELD);
+
+    // Time stamp
+    outFrameData.rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
+    outFrameData.rtStop = (outFrameData.rtStart == INVALID_REFTIME) ? INVALID_REFTIME : (outFrameData.rtStart + 1);
+    
+    // TODO: find actual frame type I/P/B
+    // Media sample isn't reliable as it referes to an older frame!
+    outFrameData.frameType = QsFrameData::I;
+
+    // Obtain surface data and copy it to temp buffer.
+    mfxFrameData frameData;
+    m_pDecoder->LockFrame(pSurface, &frameData);
+
+    size_t height = pSurface->Info.CropH; // Cropped image height
+
+    // Fill image size
+    outFrameData.rcFull.top    = outFrameData.rcFull.left = 0;
+    outFrameData.rcFull.bottom = (LONG)height - 1;
+    outFrameData.rcFull.right  = MSDK_ALIGN16(pSurface->Info.CropW + pSurface->Info.CropX) - 1;
+    outFrameData.rcClip.top    = 0;
+    outFrameData.rcClip.bottom = (LONG)height - 1; // Height is not padded in output buffer
+
+    // Note that we always crop the height
+    outFrameData.rcClip.left  = pSurface->Info.CropX;
+    outFrameData.rcClip.right = pSurface->Info.CropW + pSurface->Info.CropX - 1;
+
+    outFrameData.dwStride = frameData.Pitch;
+
+    if (m_bNeedToFlush) return;
+
+    if (m_Config.bDropDuplicateFrames) duplicates = 1;
+
+
+    for (int i = 0; i < duplicates && !m_bNeedToFlush; ++i) 
     {
-        QsFrameData* pFrameData = m_ProcessedFrame.first;
-        // Send the surface out - return code from dshow filter is ignored.
-        MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d)\n", pFrameData->rtStart);
-        m_DeliverSurfaceCallback(m_ObjParent, pFrameData);
+        // Fix time stamps for duplicated frames
+        if (outFrameData.rtStart != INVALID_REFTIME && pSurface->Info.FrameRateExtN > 0)
+        {
+            outFrameData.rtStart += (REFERENCE_TIME)(0.5 + (1e7 * i) * (double)pSurface->Info.FrameRateExtD / (double)pSurface->Info.FrameRateExtN);
+            outFrameData.rtStop = outFrameData.rtStart + 1;
+        }
+
+        switch (m_SurfaceType)
+        {
+        case QS_SURFACE_GPU:
+            CopyFramePointers(pSurface, outFrameData, frameData);
+            break;
+
+        case QS_SURFACE_SYSTEM:
+        default:
+            // Copy to output surface and write metadata
+            CopyFrame(pSurface, outFrameData, pOutBuffer, frameData);
+        }
+
+        if (!m_bNeedToFlush)
+        {
+            // Send the surface out - return code from dshow filter is ignored.
+            MSDK_VTRACE("QsDecoder: DeliverSurfaceCallback (%I64d)\n", outFrameData.rtStart);
+            m_DeliverSurfaceCallback(m_ObjParent, &outFrameData);
+        }
     }
+    
+    // Unlock the frame
+    m_pDecoder->UnlockFrame(pSurface, &frameData);
 }
 
 void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData::QsFrameStructure& frameStructure)
@@ -1184,11 +1260,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                 else
                 {
                     MSDK_TRACE("QsDecoder: VPP->Process failed with error %i\n", (int)sts);
-                    if (pOutSurface)
-                    {
-                        m_pVPP->UnlockSurface(pOutSurface);
-                    }
-
                     pOutSurface = pInSurface;
                     sts = MFX_ERR_NONE;
                 }
@@ -1201,51 +1272,10 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
             MSDK_VTRACE("QsDecoder: warning received a corrupted frame\n");
         }
 
-        // If input frame was meant to be discarded then we still want to VPP to work -
-        // minimize VPP initialization artifacts.
-        // Create output frame
-        if (!(bDiscardFrame || m_bNeedToFlush))
+        // Deliver the frame!
+        if (!bDiscardFrame)
         {
-            for (int i = 0; i < frameDuplicates && !m_bNeedToFlush; ++i)
-            {
-                if (m_bNeedToFlush)
-                {
-                    if (m_pVPP)
-                    {
-                        // Release VPP surface
-                        // On VPP error this might not be a VPP surface but a decoder surface.
-                        // Calling UnlockSurface is a safe functions, it will work only on its own surfaces.
-                        m_pVPP->UnlockSurface(pOutSurface);
-                    }
-
-                    goto done;
-                }
-
-                QsFrameData& outFrameData = *m_ProcessedFrame.first;
-                CQsAlignedBuffer*& pOutBuffer = m_ProcessedFrame.second;
-
-                // Clear the outFrameData
-                MSDK_ZERO_VAR(outFrameData);
-
-                outFrameData.bCorrupted = pOutSurface->Data.Corrupted != 0;
-
-                // Copy to output surface and write metadata
-                CopyFrame(pOutSurface, outFrameData, pOutBuffer);
-
-                // Fix time stamps for duplicated frames
-                if (outFrameData.rtStart != INVALID_REFTIME && pOutSurface->Info.FrameRateExtN > 0)
-                {
-                    outFrameData.rtStart += (REFERENCE_TIME)(0.5 + (1e7 * i) * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);
-                    outFrameData.rtStop = outFrameData.rtStart + 1;
-                }
-
-                // Keep or drop the processed frame
-                if (!m_bNeedToFlush)
-                {
-                    // Enter result in the processed queue
-                    DeliverSurface();
-                }
-            }
+            DeliverSurface(pOutSurface, frameDuplicates);
         }
 
         // Unlock VPP surface
@@ -1259,7 +1289,6 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
             break;
     }
 
-done:
     ++m_nSegmentFrameCount; // Count only input frames
 
     // Release decoder surface
@@ -1269,29 +1298,23 @@ done:
     return S_OK;
 }
 
-void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, CQsAlignedBuffer*& pOutBuffer)
+void CQuickSync::CopyFramePointers(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, mfxFrameData& frameData)
 {
-    UpdateAspectRatio(pSurface, outFrameData);
-    outFrameData.fourCC = pSurface->Info.FourCC;
+    size_t pitch  = frameData.Pitch;      // Image line + padding in bytes --> set by the driver
+   
+    // Mark Y, U & V pointers on D3D buffer
+    outFrameData.y = frameData.Y + (pSurface->Info.CropY * pitch);
+    outFrameData.u = frameData.CbCr + (pSurface->Info.CropY * pitch);
+    outFrameData.v = 0;
+    outFrameData.a = 0;
 
-    // Setup interlacing info
-    PicStructToDsFlags(pSurface->Info.PicStruct, outFrameData.dwInterlaceFlags, outFrameData.frameStructure);
-    outFrameData.bFilm = 0 != (outFrameData.dwInterlaceFlags & AM_VIDEO_FLAG_REPEAT_FIELD);
+    // App can't modify this buffer!
+    outFrameData.bReadOnly = true;
+}
 
-    // Time stamp
-    outFrameData.rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
-    outFrameData.rtStop = (outFrameData.rtStart == INVALID_REFTIME) ? INVALID_REFTIME : (outFrameData.rtStart + 1);
-    
-    // TODO: find actual frame type I/P/B
-    // Media sample isn't reliable as it referes to an older frame!
-    outFrameData.frameType = QsFrameData::I;
-
-    // Obtain surface data and copy it to temp buffer.
-    mfxFrameData frameData;
-    m_pDecoder->LockFrame(pSurface, &frameData);
-    
+void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData, CQsAlignedBuffer*& pOutBuffer, mfxFrameData& frameData)
+{
     // Setup output buffer
-    outFrameData.dwStride = frameData.Pitch;
     size_t outSize = 4096 + // Adding 4K for page alignment optimizations
         outFrameData.dwStride * pSurface->Info.CropH * 3 / 2;
 
@@ -1304,17 +1327,6 @@ void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData
 
     size_t height = pSurface->Info.CropH; // Cropped image height
     size_t pitch  = frameData.Pitch;      // Image line + padding in bytes --> set by the driver
-
-    // Fill image size
-    outFrameData.rcFull.top    = outFrameData.rcFull.left = 0;
-    outFrameData.rcFull.bottom = (LONG)height - 1;
-    outFrameData.rcFull.right  = MSDK_ALIGN16(pSurface->Info.CropW + pSurface->Info.CropX) - 1;
-    outFrameData.rcClip.top    = 0;
-    outFrameData.rcClip.bottom = (LONG)height - 1; // Height is not padded in output buffer
-
-    // Note that we always crop the height
-    outFrameData.rcClip.left  = pSurface->Info.CropX;
-    outFrameData.rcClip.right = pSurface->Info.CropW + pSurface->Info.CropX - 1;
 
     // Offset output buffer's address for fastest SSE4.1 copy.
     // Page offset (12 lsb of addresses) sould be 2K apart from source buffer
@@ -1339,9 +1351,6 @@ void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData
     // Copy UV
     !m_bNeedToFlush && memcpyFunc(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
 #endif
-
-    // Unlock the frame
-    m_pDecoder->UnlockFrame(pSurface, &frameData);
 
 #ifdef _DEBUG
     // Debug only - mark top left corner: when working with D3D
@@ -1377,22 +1386,10 @@ void CQuickSync::FlushVPP()
             break;
         }
 
-        QsFrameData& outFrameData = *m_ProcessedFrame.first;
-        CQsAlignedBuffer*& pOutBuffer = m_ProcessedFrame.second;
-
-        // Clear the outFrameData
-        MSDK_ZERO_VAR(outFrameData);
-
         // If input frame was meant to be discarded then we still want to VPP to work -
         // minimize VPP initialization artifacts
-        if (!m_bNeedToFlush)
-        {
-            CopyFrame(pOutSurface, outFrameData, pOutBuffer);
-        }
-
+        DeliverSurface(pOutSurface);
         m_pVPP->UnlockSurface(pOutSurface);
-
-        DeliverSurface();
     }
 }
 
