@@ -33,6 +33,7 @@
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
+struct IMediaSample;
 
 // Return value of the check function.
 // Caps are bitwise OR of the following values
@@ -54,6 +55,13 @@ enum QsFieldOrder
     QS_FIELD_AUTO = 0,
     QS_FIELD_TFF  = 1,
     QS_FIELD_BFF  = 2
+};
+
+enum QsOutputSurfaceType
+{
+    QS_SURFACE_SYSTEM              = 0, // surface is pointers to yuv in system memory
+    QS_SURFACE_GPU                 = 1, // surface is pointers to yuv in GPU memory, must use gpu_memcpy
+    //QS_SURFACE_DXVA_MEDIA_SAMPLE   = 2, // pMediaSample pointer is active, uv pointers are NULL.
 };
 
 // This struct holds an output frame + meta data
@@ -83,7 +91,7 @@ struct QsFrameData
     // Pointers to data buffer
     // Memory should not be freed externally!
     // Packed UV surfaces (NV12) should use the 'u' pointer.
-    union { unsigned char* y; unsigned char* red;   };
+    union { unsigned char* y; unsigned char* red; IMediaSample* pMediaSample; };
     union { unsigned char* u; unsigned char* green; };
     union { unsigned char* v; unsigned char* blue;  };
     union { unsigned char* a; unsigned char* alpha; };
@@ -102,6 +110,7 @@ struct QsFrameData
     QsFrameStructure frameStructure;     // See QsFrameStructure enum comments
     bool             bReadOnly;          // If true, the frame's content can be overwritten (most likely bReadOnly will remain false forever)
     bool             bCorrupted;         // If true, the HW decoder reported corruption in this frame
+    unsigned reserved[20];
 };
 
 // config for QuickSync component
@@ -118,20 +127,23 @@ struct CQsConfig
         unsigned misc;
         struct
         {
-            unsigned nOutputQueueLength     :  6; // use a minimum of 8 frame for more accurate frame rate calculations
-            bool     bMod16Width            :  1; // deprecated
-            bool     bEnableMultithreading  :  1; // enable worker threads for low latency decode (better performance, more power)
-            bool     bTimeStampCorrection   :  1; // when true time stamp will be generated.
-                                                  // when false -> DS filter will do this.
-            bool     bEnableMtCopy          :  1; // enables MT frame copy
-            bool     depr_bEnableMtDecode     :  1; // depracated
-            bool     depr_bEnableMtProcessing :  1; // depracated
-            bool     bEnableVideoProcessing :  1;
-            bool     bEnableSwEmulation     :  1; // When true, a SW version of the decoder will be used (if possible) if HW fails
-            bool     bForceFieldOrder       :  1; // When true decoder interlacing flags are overwriten
-            unsigned eFieldOrder            :  2; // When forced DI is used, this will mark if the progressive frames as TFF or BFF
-
-            unsigned reserved1              : 16;
+            unsigned nOutputQueueLength       :  6; // use a minimum of 8 frame for more accurate frame rate calculations
+            bool     bMod16Width              :  1; // deprecated
+            bool     bEnableMultithreading    :  1; // enable worker threads for low latency decode (better performance, more power)
+            bool     bTimeStampCorrection     :  1; // True: time stamp will be generated.
+                                                    // False: DS filter may do this.
+            bool     bEnableMtCopy            :  1; // enables MT frame copy
+            bool     depr_bEnableMtDecode     :  1; // deprecated
+            bool     depr_bEnableMtProcessing :  1; // deprecated
+            bool     bEnableVideoProcessing   :  1; // Master switch for DI, denoise, detail, etc.
+            bool     bEnableSwEmulation       :  1; // When true, a SW version of the decoder will be used (if possible) if HW fails
+            bool     bForceFieldOrder         :  1; // When true decoder interlacing flags are overwriten
+            unsigned eFieldOrder              :  2; // When forced DI is used, this will mark if the progressive frames as TFF or BFF
+            bool     bDropDuplicateFrames     :  1; // True: duplicated frames will be dropped
+                                                    // False: when a frame is marked as duplicated it will be sent out with a modified time
+                                                    //        stamp based on the first frame and frame rate. Useful for transcoding.
+                                                    
+            unsigned reserved1                : 14;
         };
     };
 
@@ -230,6 +242,9 @@ struct IQuickSyncDecoder
     // Call this function to modify the decoder config.
     // Must be called before calling the InitDecoder method.
     virtual void SetConfig(CQsConfig* pConfig) = 0;
+
+    // Change output surface type dynamically
+    virtual void SetOutputSurfaceType(QsOutputSurfaceType surfaceType) = 0;
 
 protected:
     // Ban copying!

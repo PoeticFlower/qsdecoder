@@ -37,14 +37,11 @@
 
 #define MAX_SURFACES 256
 
-#ifndef countof
-#   define countof(array) (size_t)(sizeof(array)/sizeof(array[0]))
-#endif
-
+#define MSDK_ARRAY_LEN(A)                        (sizeof(A) / sizeof(A[0]))
 #define MSDK_PRINT_RET_MSG(ERR) \
 {\
     TCHAR msg[1024];    \
-    _stprintf_s(msg, countof(msg), _T("\nReturn on error: error code %d,\t%s\t%d\n\n"), ERR, _T(__FILE__), __LINE__); \
+    _stprintf_s(msg, MSDK_ARRAY_LEN(msg), _T("\nReturn on error: error code %d,\t%s\t%d\n\n"), ERR, _T(__FILE__), __LINE__); \
     OutputDebugString(msg); \
     _tperror(msg);\
 }
@@ -63,10 +60,9 @@
 #define MSDK_ZERO_VAR(VAR)                       { memset(&VAR, 0, sizeof(VAR)); }
 #define MSDK_ALIGN16(SZ)                         ((SZ + 15) & (~15)) // round up to a multiple of 16
 #define MSDK_ALIGN32(SZ)                         ((SZ + 31) & (~31)) // round up to a multiple of 32
-#define MSDK_ARRAY_LEN(value)                    (sizeof(value) / sizeof(value[0]))
 
 #ifdef _DEBUG
-#   define ASSERT(_x_)  { if (!(_x_)) DebugAssert(TEXT(#_x_),TEXT(__FILE__),__LINE__); }
+#   define ASSERT(_x_)  { if (!(_x_)) DebugAssert(_T(#_x_),_T(__FILE__),__LINE__); }
 #else
 #   define ASSERT(x)
 #endif

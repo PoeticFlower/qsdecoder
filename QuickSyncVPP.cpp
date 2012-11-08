@@ -278,32 +278,40 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
     pOutSurface = FindFreeSurface();
     MSDK_CHECK_POINTER(pOutSurface, MFX_ERR_NOT_ENOUGH_BUFFER);
 
+    mfxU16 picStructSave = (pInSurface != NULL) ? pInSurface->Info.PicStruct : 0;
+    mfxU16& inPicStruct  = (pInSurface != NULL) ? pInSurface->Info.PicStruct : picStructSave;
+
+    // Workaround: remove frame duplication flags, causes VPP to fail
+    if (inPicStruct & MFX_PICSTRUCT_FRAME_DOUBLING)
+        inPicStruct ^= MFX_PICSTRUCT_FRAME_DOUBLING;
+    else if (inPicStruct & MFX_PICSTRUCT_FRAME_TRIPLING)
+        inPicStruct ^= MFX_PICSTRUCT_FRAME_TRIPLING;
+
     // Force interlaced flags
     if (m_Config.bVppEnableForcedDeinterlacing && pInSurface != NULL)
     {
         // Frame is TFF
-        if (pInSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_TFF)
-            pInSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
+        if (inPicStruct & MFX_PICSTRUCT_FIELD_TFF)
+            inPicStruct = MFX_PICSTRUCT_FIELD_TFF;
         // Frame is BFF
-        else if (pInSurface->Info.PicStruct & MFX_PICSTRUCT_FIELD_BFF)
-            pInSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_BFF;
+        else if (inPicStruct & MFX_PICSTRUCT_FIELD_BFF)
+            inPicStruct = MFX_PICSTRUCT_FIELD_BFF;
         // Frame is progressive - override with default flag
         else if (m_DefaultPicStruct != 0)
-            pInSurface->Info.PicStruct = m_DefaultPicStruct;
+            inPicStruct = m_DefaultPicStruct;
         else
         {
             // Arbitrary choose TFF
-            pInSurface->Info.PicStruct = MFX_PICSTRUCT_FIELD_TFF;
+            inPicStruct = MFX_PICSTRUCT_FIELD_TFF;
         }
     }
 
     // Workaround for DI bug - doesn't accept frame with MFX_PICSTRUCT_PROGRESSIVE flag
-    if (m_Config.bVppEnableDeinterlacing && pInSurface != NULL)
-    {
-        mfxU16& picStruct = pInSurface->Info.PicStruct;
-        if (0 != (picStruct & MFX_PICSTRUCT_PROGRESSIVE) && picStruct != MFX_PICSTRUCT_PROGRESSIVE)
+    if (m_Config.bVppEnableDeinterlacing)
+    {        
+        if (0 != (inPicStruct & MFX_PICSTRUCT_PROGRESSIVE) && inPicStruct != MFX_PICSTRUCT_PROGRESSIVE)
         {
-            picStruct &= ~MFX_PICSTRUCT_PROGRESSIVE;
+            inPicStruct ^= MFX_PICSTRUCT_PROGRESSIVE;
         }
     }
 
@@ -331,14 +339,22 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
         // Some error has occurred
         if (sts < 0)
         {
+            pOutSurface = NULL;
             rc = sts;
         }
         else
         {
             LockSurface(pOutSurface);
+
+            // Restore frame doubling/trippling flags to output frame
+            if (picStructSave & MFX_PICSTRUCT_FRAME_DOUBLING)
+                pOutSurface->Info.PicStruct ^= MFX_PICSTRUCT_FRAME_DOUBLING;
+            else if (picStructSave & MFX_PICSTRUCT_FRAME_TRIPLING)
+                pOutSurface->Info.PicStruct ^= MFX_PICSTRUCT_FRAME_TRIPLING;
         }
     }
 
+    inPicStruct = picStructSave;
     return rc;
 }
 
