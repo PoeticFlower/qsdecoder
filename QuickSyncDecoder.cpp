@@ -557,7 +557,7 @@ done:
     if (hDevice != NULL)
     {
         m_pRendererD3dDeviceManager->UnlockDevice(hDevice, FALSE);
-        m_pRendererD3dDeviceManager->CloseDeviceHandle(&hDevice);
+        m_pRendererD3dDeviceManager->CloseDeviceHandle(hDevice);
     }
 
     return sts;
