@@ -581,7 +581,8 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     // where NewSegment/OnSeek isn't issued.
     if (m_bNeedToFlush)
     {
-        OnSeek(0);
+        if (FAILED(OnSeek(0)))
+            return E_FAIL;
     }
 
     MSDK_CHECK_NOT_EQUAL(m_OK, true, E_UNEXPECTED);
