@@ -111,7 +111,12 @@ void* gpu_memcpy_sse41(void* d, const void* s, size_t size)
 }
 
 // AVX2 copy function. Available since Haswell (4th Generation Core architecture) on premium models.
-#if defined (AVX2_ENABLED)
+#if !defined (AVX2_ENABLED)
+void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
+{
+    return gpu_memcpy_sse41(d, s, size);
+}
+#else //#if defined (AVX2_ENABLED)
 void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
 {
     // Must be exp of 2
