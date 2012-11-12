@@ -35,6 +35,12 @@
 #define MIN_REQUIRED_API_VER_MINOR 1
 #define MIN_REQUIRED_API_VER_MAJOR 1
 
+// VS2012 provides AVX and AVX2 intrinsics
+#if _MSC_VER >= 1700 
+#   define AVX_ENABLED
+#   define AVX2_ENABLED
+#endif
+
 #define MAX_SURFACES 256
 
 #define MSDK_ARRAY_LEN(A)                        (sizeof(A) / sizeof(A[0]))
