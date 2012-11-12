@@ -919,7 +919,7 @@ void CQuickSync::FlushOutputQueue()
     ASSERT(m_pDecoder->OutputQueueEmpty());
 }
 
-HRESULT CQuickSync::OnSeek(REFERENCE_TIME segmentStart)
+HRESULT CQuickSync::OnSeek(REFERENCE_TIME /* segmentStart */)
 {
     MSDK_TRACE("QsDecoder: OnSeek\n");
     MSDK_CHECK_POINTER(m_pDecoder, E_UNEXPECTED);

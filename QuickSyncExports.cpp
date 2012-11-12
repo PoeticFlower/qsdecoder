@@ -36,7 +36,9 @@
 #include "QuickSync.h"
 
 #ifdef __INTEL_COMPILER
-#   if __INTEL_COMPILER >= 1200
+#   if __INTEL_COMPILER >= 1300
+#       define COMPILER "ICL 13"
+#   elif __INTEL_COMPILER >= 1200
 #       define COMPILER "ICL 12"
 #   elif __INTEL_COMPILER >= 1100
 #       define COMPILER "ICL 11"
@@ -46,7 +48,9 @@
 #       define COMPILER "ICL"
 #   endif
 #elif defined(_MSC_VER)
-#   if _MSC_VER==1600
+#   if _MSC_VER==1700
+#       define COMPILER "MSVC 2012"
+#   elif _MSC_VER==1600
 #       define COMPILER "MSVC 2010"
 #   elif _MSC_VER==1500
 #       define COMPILER "MSVC 2008"
@@ -77,7 +81,7 @@ void __stdcall getVersion(char* ver, const char** license)
 {
     static const char s_Version[] = QS_DEC_VERSION " by Eric Gur. " COMPILER ", " ARCH " (" __DATE__ " " __TIME__ ")";
     strcpy_s(ver, 100, s_Version);
-    *license = "(C) 2011 Intel\xae Corp.";
+    *license = "(C) 2013 Intel\xae Corp.";
 }
 
 DWORD __stdcall check()

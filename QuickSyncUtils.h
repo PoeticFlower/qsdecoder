@@ -28,10 +28,15 @@
 
 #pragma once
 
-// SSE4.1 based memcpy that copies from video memory to system memory
-void* gpu_memcpy_sse41(void* d, const void* s, size_t _size);
-void* mt_memcpy(void* d, const void* s, size_t size);
-void* mt_gpu_memcpy(void* d, const void* s, size_t size);
+extern "C" 
+{
+    // SSE4.1 based memcpy that copies from video memory to system memory
+    void* gpu_memcpy_sse41(void* d, const void* s, size_t _size);
+    // AVX2 based memcpy that copies from video memory to system memory
+    void* gpu_memcpy_avx2(void* d, const void* s, size_t size);
+    void* mt_memcpy(void* d, const void* s, size_t size);
+    void* mt_gpu_memcpy(void* d, const void* s, size_t size);
+}
 
 // Finds greatest common divider
 mfxU32 GCD(mfxU32 a, mfxU32 b);

@@ -464,5 +464,7 @@ void* mt_memcpy(void* d, const void* s, size_t size)
 
 void* mt_gpu_memcpy(void* d, const void* s, size_t size)
 {
-    return mt_copy(d, s, size, gpu_memcpy_sse41);
+    return (s_AVX2_enabled) ?
+        mt_copy(d, s, size, gpu_memcpy_avx2) :
+        mt_copy(d, s, size, gpu_memcpy_sse41);
 }
