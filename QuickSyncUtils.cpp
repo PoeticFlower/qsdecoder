@@ -120,7 +120,7 @@ void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
 void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
 {
     // Must be exp of 2
-    static const size_t regsInLoop = 2; //TODO: need to tune this...
+    static const size_t regsInLoop = 4; //TODO: need to tune this...
 
     if (d == NULL || s == NULL) return NULL;
 
@@ -134,7 +134,7 @@ void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
     size_t reminder = size & (regsInLoop * sizeof(__m256i) - 1); // Copy 64 bytes every loop
     size_t end = 0;
 
-    __m256i ymm0, ymm1; // Will actually use ymm registers
+    __m256i ymm0, ymm1, ymm2, ymm3; // Will actually use ymm registers
     __m256i* pTrg = (__m256i*)d;
     __m256i* pTrgEnd = pTrg + ((size - reminder) >> 5);
     __m256i* pSrc = (__m256i*)s;
@@ -148,6 +148,8 @@ void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
         // Available since Haswell (22nm, 4th Generation Core)
         ymm0  = _mm256_stream_load_si256(pSrc);
         ymm1  = _mm256_stream_load_si256(pSrc + 1);
+        ymm2  = _mm256_stream_load_si256(pSrc + 2);
+        ymm3  = _mm256_stream_load_si256(pSrc + 3);
         pSrc += regsInLoop;
 
         // _mm256_store_si256 emit the AVX intruction VMOVDQA (aligned store)
@@ -156,6 +158,8 @@ void* gpu_memcpy_avx2(void* d, const void* s, size_t size)
         // and better keep the L3 cache hot.
         _mm256_store_si256(pTrg     , ymm0);
         _mm256_store_si256(pTrg +  1, ymm1);
+        _mm256_store_si256(pTrg +  2, ymm2);
+        _mm256_store_si256(pTrg +  3, ymm3);
         pTrg += regsInLoop;
     }
 
@@ -450,7 +454,7 @@ static void* mt_copy(void* d, const void* s, size_t size, Tmemcpy memcpyFunc)
         return memcpyFunc(d, s, size);
     }
 
-    size_t blockSize = (size / 2) & ~0xf; // Make size a multiple of 16 bytes
+    size_t blockSize = (size / 2) & ~31; // Make size a multiple of 32 bytes
     std::array<size_t, 3> offsets = { 0, blockSize, size };
     std::array<size_t, 2> indexes = { 0, 1 };
 
