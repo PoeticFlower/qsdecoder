@@ -152,7 +152,7 @@ class CQsAlignedBuffer
 public:
     CQsAlignedBuffer(size_t bufferSize) : m_BufferSize(bufferSize)
     {
-        m_Buffer = (BYTE*)_aligned_malloc(m_BufferSize, 16);
+        m_Buffer = (BYTE*)_aligned_malloc(m_BufferSize, 64);
     }
 
     ~CQsAlignedBuffer()
