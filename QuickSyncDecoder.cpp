@@ -466,6 +466,8 @@ mfxStatus CQuickSyncDecoder::InitD3D()
 
 mfxStatus CQuickSyncDecoder::InitD3DFromRenderer()
 {
+    MSDK_VTRACE("QsDecoder: InitD3DFromRenderer\n");
+
     // Get DirectX Object
     HANDLE hDevice;
     IDirect3DDevice9* pDevice = NULL;
@@ -481,9 +483,23 @@ mfxStatus CQuickSyncDecoder::InitD3DFromRenderer()
         goto done;
     }
     hr = m_pRendererD3dDeviceManager->LockDevice(hDevice, &pDevice, TRUE);
-    if (FAILED(hr) && NULL == pDevice)
+    if (FAILED(hr) || NULL == pDevice)
     {
         MSDK_TRACE("QsDecoder: failed to lock device!\n");
+        switch (hr)
+        {
+        case DXVA2_E_NEW_VIDEO_DEVICE:
+            MSDK_TRACE("QsDecoder: The device handle is invalid.!\n");
+            break;
+        case DXVA2_E_NOT_INITIALIZED:
+            MSDK_TRACE("QsDecoder: The Direct3D device manager was not initialized.!\n");
+            break;
+        case E_HANDLE:
+            MSDK_TRACE("QsDecoder: The specified handle is not a Direct3D device handle.!\n");
+            break;
+        default:
+            MSDK_TRACE("QsDecoder: Unknown error %x\n", hr);
+        }
         goto done;
     }
 
