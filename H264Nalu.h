@@ -38,6 +38,7 @@ typedef enum
     NALU_TYPE_FILL     = 12
 } NALU_TYPE;
 
+#define IS_VALID_NALU(nalu) (nalu >= NALU_TYPE_SLICE && nalu <= NALU_TYPE_FILL)
 
 class CH264Nalu
 {
