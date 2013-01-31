@@ -101,6 +101,8 @@ protected:
         CQsAutoLock cObjectLock(&m_csLock);
         m_SurfaceType = surfaceType;
     }
+    const char* GetCodecName() const { return m_CodecName; }
+    bool IsHwAccelerated() const { return (m_pDecoder) ? m_pDecoder->IsHwAccelerated() : false; }
 
     bool SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStart);
     void SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& FrameInfo);
@@ -136,6 +138,7 @@ protected:
     CQsConfig           m_Config;                  // Global config
     mfxU32              m_PicStruct;
     QsOutputSurfaceType m_SurfaceType;
+    char                m_CodecName[256];
 
     typedef std::pair<QsFrameData*, CQsAlignedBuffer*> TQsQueueItem;
     TQsQueueItem m_ProcessedFrame;

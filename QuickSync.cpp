@@ -61,9 +61,11 @@ CQuickSync::CQuickSync() :
     m_bDvdDecoding(false),
     m_PicStruct(0),
     m_SurfaceType(QS_SURFACE_SYSTEM),
-    m_ProcessedFrame(new QsFrameData, new CQsAlignedBuffer(0))
+    m_ProcessedFrame(new QsFrameData, new CQsAlignedBuffer(0)
+    )
 {
     MSDK_TRACE("QsDecoder: Constructor\n");
+    strcpy(m_CodecName, "Intel\xae QuickSync Decoder");
 
     mfxStatus sts = MFX_ERR_NONE;
     m_pDecoder = new CQuickSyncDecoder(sts);
@@ -105,7 +107,7 @@ CQuickSync::CQuickSync() :
 //    m_Config.nVppDenoiseStrength     = 16; // 0-64
 
 //    m_Config.bDropDuplicateFrames = true;
-
+        
     m_OK = (sts == MFX_ERR_NONE);
 }
 
@@ -191,18 +193,18 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
         if (hr != S_OK)
         {
             MSDK_TRACE("QsDecoder::InitDecoder - failed due to unsupported codec (%s), profile (%s), level (%i) combination\n",
-                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
+                ::GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
             return E_NOTIMPL;
         }
         else
         {
             MSDK_TRACE("QsDecoder::InitDecoder - codec (%s), profile (%s), level (%i)\n",
-                GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
+                ::GetCodecName(mfx.CodecId), GetProfileName(mfx.CodecId, mp2->dwProfile), mp2->dwLevel);
         }
     }
     else
     {
-        MSDK_TRACE("QsDecoder::InitDecoder - codec (%s)\n", GetCodecName(mfx.CodecId));
+        MSDK_TRACE("QsDecoder::InitDecoder - codec (%s)\n", ::GetCodecName(mfx.CodecId));
     }
 
     return S_OK;
@@ -526,6 +528,9 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
 
         m_pDecoder->SetAuxFramesCount(surfaceCount);
     }
+
+    _snprintf_s(m_CodecName, MSDK_ARRAY_LEN(m_CodecName), MSDK_ARRAY_LEN(m_CodecName)-1,
+        "Intel\xae QuickSync Decoder (%s)" , ::GetCodecName(m_DecVideoParams.mfx.CodecId));
 
     delete[] (mfxU8*)vih2;
     m_OK = (sts == MFX_ERR_NONE);

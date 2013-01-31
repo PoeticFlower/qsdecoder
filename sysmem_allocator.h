@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -32,28 +32,20 @@
 
 struct sBuffer
 {
-    union
-    {
-        mfxU32 id;
-        char   idName[4];
-    };
-    mfxU32 nbytes;
-    mfxU16 type;
+    mfxU32      id;
+    mfxU32      nbytes;
+    mfxU16      type;
 };
 
 struct sFrame
 {
-    union
-    {
-        mfxU32 id;
-        char   idName[4];
-    };
+    mfxU32          id;
     mfxFrameInfo    info;
 };
 
 struct SysMemAllocatorParams : mfxAllocatorParams
 {
-    MFXBufferAllocator* pBufferAllocator;
+    MFXBufferAllocator *pBufferAllocator;
 }; 
 
 class SysMemFrameAllocator: public BaseFrameAllocator
@@ -62,18 +54,18 @@ public:
     SysMemFrameAllocator();
     virtual ~SysMemFrameAllocator(); 
 
-    virtual mfxStatus Init(mfxAllocatorParams* pParams);
+    virtual mfxStatus Init(mfxAllocatorParams *pParams);
     virtual mfxStatus Close();
+    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData *ptr);
+    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData *ptr);
+    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL *handle);       
 
 protected:
-    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData* ptr);
-    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData* ptr);
-    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL* handle);       
-    virtual mfxStatus CheckRequestType(mfxFrameAllocRequest* request);
-    virtual mfxStatus ReleaseResponse(mfxFrameAllocResponse* response);
-    virtual mfxStatus AllocImpl(mfxFrameAllocRequest* request, mfxFrameAllocResponse* response);
+    virtual mfxStatus CheckRequestType(mfxFrameAllocRequest *request);
+    virtual mfxStatus ReleaseResponse(mfxFrameAllocResponse *response);
+    virtual mfxStatus AllocImpl(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response);
 
-    MFXBufferAllocator* m_pBufferAllocator;
+    MFXBufferAllocator *m_pBufferAllocator;
     bool m_bOwnBufferAllocator;
 };
 
@@ -82,10 +74,8 @@ class SysMemBufferAllocator : public MFXBufferAllocator
 public:
     SysMemBufferAllocator();
     virtual ~SysMemBufferAllocator();  
-
-protected:
-    virtual mfxStatus AllocBuffer(mfxU32 nbytes, mfxU16 type, mfxMemId* mid);
-    virtual mfxStatus LockBuffer(mfxMemId mid, mfxU8** ptr);
+    virtual mfxStatus AllocBuffer(mfxU32 nbytes, mfxU16 type, mfxMemId *mid);
+    virtual mfxStatus LockBuffer(mfxMemId mid, mfxU8 **ptr);
     virtual mfxStatus UnlockBuffer(mfxMemId mid);    
     virtual mfxStatus FreeBuffer(mfxMemId mid); 
 };

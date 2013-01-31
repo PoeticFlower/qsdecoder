@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.40"
+#define QS_DEC_VERSION  "v0.41"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -246,6 +246,8 @@ struct IQuickSyncDecoder
     // Change output surface type dynamically
     virtual void SetOutputSurfaceType(QsOutputSurfaceType surfaceType) = 0;
 
+    virtual const char* GetCodecName() const = 0;
+    virtual bool IsHwAccelerated() const = 0;
 protected:
     // Ban copying!
     IQuickSyncDecoder& operator=(const IQuickSyncDecoder&);
