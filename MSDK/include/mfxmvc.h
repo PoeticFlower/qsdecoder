@@ -4,7 +4,7 @@ INTEL CORPORATION PROPRIETARY INFORMATION
 This software is supplied under the terms of a license agreement or nondisclosure
 agreement with Intel Corporation and may not be copied or disclosed except in
 accordance with the terms of that agreement
-Copyright(c) 2010 - 2011 Intel Corporation. All Rights Reserved.
+Copyright(c) 2010 - 2012 Intel Corporation. All Rights Reserved.
 
 File Name: mfxmvc.h
 
@@ -33,12 +33,12 @@ enum {
 
 typedef struct  {
     mfxU16 ViewId;
-    
+
     mfxU16 NumAnchorRefsL0;
     mfxU16 NumAnchorRefsL1;
     mfxU16 AnchorRefL0[16];
     mfxU16 AnchorRefL1[16];
-    
+
     mfxU16 NumNonAnchorRefsL0;
     mfxU16 NumNonAnchorRefsL1;
     mfxU16 NonAnchorRefL0[16];
@@ -46,30 +46,30 @@ typedef struct  {
 } mfxMVCViewDependency;
 
 typedef struct {
-    mfxU16 TemporalId;  /* operation point temporal ID */
-    mfxU16 LevelIdc; 
+    mfxU16 TemporalId;
+    mfxU16 LevelIdc;
 
-    mfxU16 NumViews; /* total number of views, including "depend on" views */
-    mfxU16 NumTargetViews; /* number of the output views for the current operation point */
-    mfxU16 *TargetViewId;  /* array of target view ID, it points to mfxExtMVCSeqDesc::ViewId, set by SDK */
+    mfxU16 NumViews;
+    mfxU16 NumTargetViews;
+    mfxU16 *TargetViewId;
 } mfxMVCOperationPoint;
 
 typedef struct  {
     mfxExtBuffer Header;
 
-    mfxU32 NumView; /* number of view in the stream, set by SDK */
-    mfxU32 NumViewAlloc; /* number of allocated elements, set by application */
-    mfxMVCViewDependency *View; /* view ID and list of views used as reference for this view, allocated by application */
+    mfxU32 NumView;
+    mfxU32 NumViewAlloc;
+    mfxMVCViewDependency *View;
 
-    mfxU32 NumViewId; /* num of views IDs, to simplify copying, set by SDK */
-    mfxU32 NumViewIdAlloc; /* number of allocated elements, set by application */
-    mfxU16 *ViewId; /* allocated by application */
+    mfxU32 NumViewId;
+    mfxU32 NumViewIdAlloc;
+    mfxU16 *ViewId;
 
-    mfxU32 NumOP; /* number of operation points in OP array, set by SDK */
-    mfxU32 NumOPAlloc; /* number of allocated elements in OP array, set by application */
-    mfxMVCOperationPoint *OP; /* allocated by application */
+    mfxU32 NumOP;
+    mfxU32 NumOPAlloc;
+    mfxMVCOperationPoint *OP;
 
-    mfxU16 NumRefsTotal; /* total number of reference frames in the sequence */
+    mfxU16 NumRefsTotal;
     mfxU32 Reserved[16];
 
 } mfxExtMVCSeqDesc;
@@ -78,13 +78,13 @@ typedef struct {
     mfxExtBuffer    Header;
 
     mfxU16 TemporalId;
-    mfxU32 NumView; /* number of view to decode */
+    mfxU32 NumView;
     mfxU16 ViewId[1024];
 } mfxExtMVCTargetViews ;
 
 
 #ifdef __cplusplus
-} // extern "C" 
+} // extern "C"
 #endif
 
 #endif

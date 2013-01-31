@@ -516,8 +516,8 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
     {    
         nNalDataLen = itStartCode.GetDataLength(); 
         pNalDataBuff = itStartCode.GetDataBuffer();
-        NALU_TYPE nalu = itStartCode.GetType();
-        switch (nalu)
+        NALU_TYPE naluType = itStartCode.GetType();
+        switch (naluType)
         {
         case NALU_TYPE_SPS:
         case NALU_TYPE_PPS: 
@@ -526,7 +526,7 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
             break; 
         default:
             // Only keep valid NALUs
-            if (IS_VALID_NALU(nalu))
+            if (IS_VALID_NALU(naluType))
             {
                 sts = MFX_ERR_MORE_DATA; 
             }
@@ -575,6 +575,9 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
 
         // Discard AUD NALUs
         if (NALU_TYPE_AUD == naluType)
+            continue;
+
+        if (!IS_VALID_NALU(naluType))
             continue;
 
         nNalDataLen =  itStartCode.GetDataLength(); 
