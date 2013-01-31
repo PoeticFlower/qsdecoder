@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -39,25 +39,24 @@ class MFXFrameAllocator : public mfxFrameAllocator
 {
 public:
     MFXFrameAllocator();
-    virtual ~MFXFrameAllocator() {}
+    virtual ~MFXFrameAllocator();
 
      // optional method, override if need to pass some parameters to allocator from application
-    virtual mfxStatus Init(mfxAllocatorParams* pParams) = 0;
+    virtual mfxStatus Init(mfxAllocatorParams *pParams) = 0;
     virtual mfxStatus Close() = 0;
-
-protected:
-    virtual mfxStatus AllocFrames(mfxFrameAllocRequest* request, mfxFrameAllocResponse* response) = 0;
-    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData* ptr) = 0;
-    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData* ptr) = 0;
-    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL* handle) = 0;
-    virtual mfxStatus FreeFrames(mfxFrameAllocResponse* response) = 0;  
+    
+    virtual mfxStatus AllocFrames(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response) = 0;
+    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData *ptr) = 0;
+    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData *ptr) = 0;
+    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL *handle) = 0;
+    virtual mfxStatus FreeFrames(mfxFrameAllocResponse *response) = 0;
 
 private:
-    static mfxStatus Alloc_(mfxHDL pthis, mfxFrameAllocRequest* request, mfxFrameAllocResponse* response);
-    static mfxStatus Lock_(mfxHDL pthis, mfxMemId mid, mfxFrameData* ptr);
-    static mfxStatus Unlock_(mfxHDL pthis, mfxMemId mid, mfxFrameData* ptr);
-    static mfxStatus GetHDL_(mfxHDL pthis, mfxMemId mid, mfxHDL* handle);
-    static mfxStatus Free_(mfxHDL pthis, mfxFrameAllocResponse* response);
+    static mfxStatus MFX_CDECL  Alloc_(mfxHDL pthis, mfxFrameAllocRequest *request, mfxFrameAllocResponse *response);
+    static mfxStatus MFX_CDECL  Lock_(mfxHDL pthis, mfxMemId mid, mfxFrameData *ptr);
+    static mfxStatus MFX_CDECL  Unlock_(mfxHDL pthis, mfxMemId mid, mfxFrameData *ptr);
+    static mfxStatus MFX_CDECL  GetHDL_(mfxHDL pthis, mfxMemId mid, mfxHDL *handle);
+    static mfxStatus MFX_CDECL  Free_(mfxHDL pthis, mfxFrameAllocResponse *response);
 };
 
 // This class implements basic logic of memory allocator
@@ -71,66 +70,91 @@ private:
 class BaseFrameAllocator: public MFXFrameAllocator
 {    
 public:
-    BaseFrameAllocator() {}
-    virtual ~BaseFrameAllocator() {}
+    BaseFrameAllocator();
+    virtual ~BaseFrameAllocator();       
 
-    virtual mfxStatus Init(mfxAllocatorParams* pParams) = 0; 
+    virtual mfxStatus Init(mfxAllocatorParams *pParams) = 0; 
     virtual mfxStatus Close();
+    virtual mfxStatus AllocFrames(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response);   
+    virtual mfxStatus FreeFrames(mfxFrameAllocResponse *response);
 
 protected:
-    virtual mfxStatus AllocFrames(mfxFrameAllocRequest* request, mfxFrameAllocResponse* response);   
-    virtual mfxStatus FreeFrames(mfxFrameAllocResponse* response);
-
     typedef std::list<mfxFrameAllocResponse>::iterator Iter;
     static const mfxU32 MEMTYPE_FROM_MASK = MFX_MEMTYPE_FROM_ENCODE | MFX_MEMTYPE_FROM_DECODE | MFX_MEMTYPE_FROM_VPPIN | MFX_MEMTYPE_FROM_VPPOUT;
 
     struct UniqueResponse
+        : mfxFrameAllocResponse 
     {
+        mfxU16 m_cropw;
+        mfxU16 m_croph;
         mfxU32 m_refCount;
-        mfxFrameAllocResponse m_response;
         mfxU16 m_type;
 
-        UniqueResponse() { Reset(); } 
-        void Reset() { memset(this, 0, sizeof(*this)); }
+        UniqueResponse()
+        {
+            memset(this, 0, sizeof(*this)); 
+        }
+
+        // compare responses by actual frame size, alignment (w and h) is up to application
+        UniqueResponse(const mfxFrameAllocResponse & response, mfxU16 cropw, mfxU16 croph, mfxU16 type)
+            : mfxFrameAllocResponse(response)
+            , m_type(type)
+            , m_refCount(1)
+            , m_cropw(cropw)
+            , m_croph(croph)
+        { 
+        } 
+        //compare by resolution
+        bool operator () (const UniqueResponse &response)const
+        {
+            return m_cropw == response.m_cropw && m_croph == response.m_croph;
+        }
     };
 
     std::list<mfxFrameAllocResponse> m_responses;
-    UniqueResponse m_externalDecoderResponse;
-   
-    // checks responses for identity
-    virtual bool IsSame(const mfxFrameAllocResponse& l, const mfxFrameAllocResponse& r);
+    std::list<UniqueResponse> m_ExtResponses;
+
+    struct IsSame
+        : public std::binary_function<mfxFrameAllocResponse, mfxFrameAllocResponse, bool> 
+    {
+        bool operator () (const mfxFrameAllocResponse & l, const mfxFrameAllocResponse &r)const
+        {
+            return r.mids != 0 && l.mids != 0 && 
+                r.mids[0] == l.mids[0] && 
+                r.NumFrameActual == l.NumFrameActual;
+        }
+    };
 
     // checks if request is supported
-    virtual mfxStatus CheckRequestType(mfxFrameAllocRequest* request);
-    
-    // memory type specific methods, must be overridden in derived classes
-
-    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData* ptr) = 0;
-    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData* ptr) = 0;
-    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL* handle) = 0;
+    virtual mfxStatus CheckRequestType(mfxFrameAllocRequest *request);
     
     // frees memory attached to response
-    virtual mfxStatus ReleaseResponse(mfxFrameAllocResponse* response) = 0;
+    virtual mfxStatus ReleaseResponse(mfxFrameAllocResponse *response) = 0;
     // allocates memory
-    virtual mfxStatus AllocImpl(mfxFrameAllocRequest* request, mfxFrameAllocResponse* response) = 0;
+    virtual mfxStatus AllocImpl(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response) = 0;
 
     template <class T>
     class safe_array
     {
     public:
-        safe_array(T* ptr = 0) : m_ptr(ptr) {} // construct from object pointer            
-        ~safe_array() { reset(0); }
-        inline T* get()
+        safe_array(T *ptr = 0):m_ptr(ptr)
+        { // construct from object pointer            
+        };        
+        ~safe_array()
+        {
+            reset(0);
+        }
+        T* get()
         { // return wrapped pointer
             return m_ptr;
         }
-        inline T* release()
+        T* release()
         { // return wrapped pointer and give up ownership
             T* ptr = m_ptr;
             m_ptr = 0;
             return ptr;
         }
-        inline void reset(T* ptr) 
+        void reset(T* ptr) 
         { // destroy designated object and store new pointer
             if (m_ptr)
             {
@@ -147,17 +171,16 @@ class MFXBufferAllocator : public mfxBufferAllocator
 {
 public:
     MFXBufferAllocator();
-    virtual ~MFXBufferAllocator() {}
+    virtual ~MFXBufferAllocator();  
 
-protected:
-    virtual mfxStatus AllocBuffer(mfxU32 nbytes, mfxU16 type, mfxMemId* mid) = 0;
-    virtual mfxStatus LockBuffer(mfxMemId mid, mfxU8** ptr) = 0;
+    virtual mfxStatus AllocBuffer(mfxU32 nbytes, mfxU16 type, mfxMemId *mid) = 0;
+    virtual mfxStatus LockBuffer(mfxMemId mid, mfxU8 **ptr) = 0;
     virtual mfxStatus UnlockBuffer(mfxMemId mid) = 0;    
     virtual mfxStatus FreeBuffer(mfxMemId mid) = 0;  
 
 private:
-    static mfxStatus Alloc_(mfxHDL pthis, mfxU32 nbytes, mfxU16 type, mfxMemId* mid);
-    static mfxStatus Lock_(mfxHDL pthis, mfxMemId mid, mfxU8** ptr);
-    static mfxStatus Unlock_(mfxHDL pthis, mfxMemId mid);    
-    static mfxStatus Free_(mfxHDL pthis, mfxMemId mid);
+    static mfxStatus MFX_CDECL  Alloc_(mfxHDL pthis, mfxU32 nbytes, mfxU16 type, mfxMemId *mid);
+    static mfxStatus MFX_CDECL  Lock_(mfxHDL pthis, mfxMemId mid, mfxU8 **ptr);
+    static mfxStatus MFX_CDECL  Unlock_(mfxHDL pthis, mfxMemId mid);    
+    static mfxStatus MFX_CDECL  Free_(mfxHDL pthis, mfxMemId mid);
 };

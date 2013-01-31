@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -38,9 +38,17 @@ enum eTypeHandle
     DXVA2_DECODER       = 0x01
 };
 
-struct D3DAllocatorParams : public mfxAllocatorParams
+struct D3DAllocatorParams : mfxAllocatorParams
 {
-    IDirect3DDeviceManager9* pManager;
+    IDirect3DDeviceManager9 *pManager;
+    DWORD surfaceUsage;
+
+    D3DAllocatorParams()
+        : pManager()
+        , surfaceUsage()
+    {
+    }
+
 };
 
 class D3DFrameAllocator : public BaseFrameAllocator
@@ -49,26 +57,27 @@ public:
     D3DFrameAllocator();
     virtual ~D3DFrameAllocator();    
 
-    virtual mfxStatus Init(mfxAllocatorParams* pParams);
+    virtual mfxStatus Init(mfxAllocatorParams *pParams);
     virtual mfxStatus Close();
 
     virtual IDirect3DDeviceManager9* GetDeviceManager()
     {
-        return m_Manager;
+        return m_manager;
     }
 
-protected:
-    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData* ptr);
-    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData* ptr);
-    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL* handle);       
+    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData *ptr);
+    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData *ptr);
+    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL *handle);
 
-    virtual mfxStatus CheckRequestType(mfxFrameAllocRequest* request);
-    virtual mfxStatus ReleaseResponse(mfxFrameAllocResponse* response);
-    virtual mfxStatus AllocImpl(mfxFrameAllocRequest* request, mfxFrameAllocResponse* response);
+protected:
+    virtual mfxStatus CheckRequestType(mfxFrameAllocRequest *request);
+    virtual mfxStatus ReleaseResponse(mfxFrameAllocResponse *response);
+    virtual mfxStatus AllocImpl(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response);
    
-    CComPtr<IDirect3DDeviceManager9> m_Manager;
-    CComPtr<IDirectXVideoDecoderService> m_DecoderService;
-    CComPtr<IDirectXVideoProcessorService> m_ProcessorService;
+    CComPtr<IDirect3DDeviceManager9> m_manager;
+    CComPtr<IDirectXVideoDecoderService> m_decoderService;
+    CComPtr<IDirectXVideoProcessorService> m_processorService;
     HANDLE m_hDecoder;
     HANDLE m_hProcessor;
+    DWORD m_surfaceUsage;
 };

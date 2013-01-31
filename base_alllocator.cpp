@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -44,48 +44,84 @@ MFXFrameAllocator::MFXFrameAllocator()
     GetHDL = GetHDL_;
 }
 
-mfxStatus MFXFrameAllocator::Alloc_(mfxHDL pthis, mfxFrameAllocRequest* request, mfxFrameAllocResponse* response)
+MFXFrameAllocator::~MFXFrameAllocator()
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXFrameAllocator*)(pthis))->AllocFrames(request, response);
 }
 
-mfxStatus MFXFrameAllocator::Lock_(mfxHDL pthis, mfxMemId mid, mfxFrameData* ptr)
+mfxStatus MFXFrameAllocator::Alloc_(mfxHDL pthis, mfxFrameAllocRequest *request, mfxFrameAllocResponse *response)
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXFrameAllocator*)(pthis))->LockFrame(mid, ptr);
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXFrameAllocator& self = *(MFXFrameAllocator *)pthis;
+
+    return self.AllocFrames(request, response);
 }
 
-mfxStatus MFXFrameAllocator::Unlock_(mfxHDL pthis, mfxMemId mid, mfxFrameData* ptr)
+mfxStatus MFXFrameAllocator::Lock_(mfxHDL pthis, mfxMemId mid, mfxFrameData *ptr)
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXFrameAllocator*)(pthis))->UnlockFrame(mid, ptr);
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXFrameAllocator& self = *(MFXFrameAllocator *)pthis;
+
+    return self.LockFrame(mid, ptr);
 }
 
-mfxStatus MFXFrameAllocator::Free_(mfxHDL pthis, mfxFrameAllocResponse* response)
+mfxStatus MFXFrameAllocator::Unlock_(mfxHDL pthis, mfxMemId mid, mfxFrameData *ptr)
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXFrameAllocator*)(pthis))->FreeFrames(response);
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXFrameAllocator& self = *(MFXFrameAllocator *)pthis;
+
+    return self.UnlockFrame(mid, ptr);
 }
 
-mfxStatus MFXFrameAllocator::GetHDL_(mfxHDL pthis, mfxMemId mid, mfxHDL* handle)
+mfxStatus MFXFrameAllocator::Free_(mfxHDL pthis, mfxFrameAllocResponse *response)
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXFrameAllocator*)(pthis))->GetFrameHDL(mid, handle);
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXFrameAllocator& self = *(MFXFrameAllocator *)pthis;
+
+    return self.FreeFrames(response);
+}
+
+mfxStatus MFXFrameAllocator::GetHDL_(mfxHDL pthis, mfxMemId mid, mfxHDL *handle)
+{
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXFrameAllocator& self = *(MFXFrameAllocator *)pthis;
+
+    return self.GetFrameHDL(mid, handle);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //    BaseFrameAllocator
 /////////////////////////////////////////////////////////////////////////////////////////////
-mfxStatus BaseFrameAllocator::CheckRequestType(mfxFrameAllocRequest* request)
+BaseFrameAllocator::BaseFrameAllocator()
 {
-    MSDK_CHECK_POINTER(request, MFX_ERR_NULL_PTR);
-
-    // check that Media SDK component is specified in request 
-    return ((request->Type & MEMTYPE_FROM_MASK) != 0) ? MFX_ERR_NONE : MFX_ERR_UNSUPPORTED;
 }
 
-mfxStatus BaseFrameAllocator::AllocFrames(mfxFrameAllocRequest* request, mfxFrameAllocResponse* response)
+BaseFrameAllocator::~BaseFrameAllocator()
+{
+}
+
+mfxStatus BaseFrameAllocator::CheckRequestType(mfxFrameAllocRequest* request)
+{
+    if (0 == request)
+        return MFX_ERR_NULL_PTR;
+
+    // check that Media SDK component is specified in request 
+    if ((request->Type & MEMTYPE_FROM_MASK) != 0)
+        return MFX_ERR_NONE;
+    else
+        return MFX_ERR_UNSUPPORTED;
+}
+
+mfxStatus BaseFrameAllocator::AllocFrames(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response)
 {
     if (0 == request || 0 == response || 0 == request->NumFrameSuggested)
         return MFX_ERR_MEMORY_ALLOC; 
@@ -95,29 +131,31 @@ mfxStatus BaseFrameAllocator::AllocFrames(mfxFrameAllocRequest* request, mfxFram
 
     mfxStatus sts = MFX_ERR_NONE;
 
-    if ((request->Type & MFX_MEMTYPE_EXTERNAL_FRAME) && (request->Type & MFX_MEMTYPE_FROM_DECODE))
+    if ( (request->Type & MFX_MEMTYPE_EXTERNAL_FRAME) && (request->Type & MFX_MEMTYPE_FROM_DECODE) )
     {
         // external decoder allocations
-        
-        if (m_externalDecoderResponse.m_refCount > 0)
-        {            
+        std::list<UniqueResponse>::iterator it = 
+            std::find_if( m_ExtResponses.begin()
+                        , m_ExtResponses.end()
+                        , UniqueResponse (*response, request->Info.CropW, request->Info.CropH, 0));
+
+        if (it != m_ExtResponses.end())
+        {
             // check if enough frames were allocated
-            if (request->NumFrameMin > m_externalDecoderResponse.m_response.NumFrameActual)
+            if (request->NumFrameMin > it->NumFrameActual)
                 return MFX_ERR_MEMORY_ALLOC;
 
-            m_externalDecoderResponse.m_refCount++;
+            it->m_refCount++;
             // return existing response
-            *response = m_externalDecoderResponse.m_response;
+            *response = (mfxFrameAllocResponse&)*it;
         }
-        else 
+        else
         {
             sts = AllocImpl(request, response);
             if (sts == MFX_ERR_NONE)
             {
-                m_externalDecoderResponse.m_response = *response;
-                m_externalDecoderResponse.m_refCount = 1;
-                m_externalDecoderResponse.m_type = request->Type & MEMTYPE_FROM_MASK;
-            }           
+                m_ExtResponses.push_back(UniqueResponse(*response, request->Info.CropW, request->Info.CropH, request->Type & MEMTYPE_FROM_MASK));
+            }
         }
     }
     else
@@ -141,38 +179,36 @@ mfxStatus BaseFrameAllocator::AllocFrames(mfxFrameAllocRequest* request, mfxFram
     return sts;
 }
 
-bool BaseFrameAllocator::IsSame(const mfxFrameAllocResponse& l, const mfxFrameAllocResponse& r)
-{
-    return l.mids != 0 && r.mids != 0 && l.mids[0] == r.mids[0] && l.NumFrameActual == r.NumFrameActual;
-}
-
-mfxStatus BaseFrameAllocator::FreeFrames(mfxFrameAllocResponse* response)
+mfxStatus BaseFrameAllocator::FreeFrames(mfxFrameAllocResponse *response)
 {
     if (response == 0)
         return MFX_ERR_INVALID_HANDLE;
 
     mfxStatus sts = MFX_ERR_NONE;
     
-    // check whether response is m_externalDecoderResponse
-    if (m_externalDecoderResponse.m_refCount > 0 && IsSame(*response, m_externalDecoderResponse.m_response))
+    // check whether response is an external decoder response
+    std::list<UniqueResponse>::iterator i = 
+        std::find_if( m_ExtResponses.begin(), m_ExtResponses.end(), std::bind1st(IsSame(), *response));
+
+    if (i != m_ExtResponses.end())
     {
-        if (--m_externalDecoderResponse.m_refCount == 0)
+        if ((--i->m_refCount) == 0)
         {
             sts = ReleaseResponse(response);
-            m_externalDecoderResponse.Reset();
+            m_ExtResponses.erase(i);
         }
         return sts;
     }
 
     // if not found so far, then search in internal responses
-    for (Iter i = m_responses.begin(); i != m_responses.end(); ++i)
+    std::list<mfxFrameAllocResponse>::iterator i2 = 
+        std::find_if(m_responses.begin(), m_responses.end(), std::bind1st(IsSame(), *response));
+
+    if (i2 != m_responses.end())
     {
-        if (IsSame(*response, *i))
-        {
-            sts = ReleaseResponse(response);
-            m_responses.erase(i);
-            return sts;
-        }
+        sts = ReleaseResponse(response);
+        m_responses.erase(i2);
+        return sts;
     }
 
     // not found anywhere, report an error
@@ -181,15 +217,19 @@ mfxStatus BaseFrameAllocator::FreeFrames(mfxFrameAllocResponse* response)
 
 mfxStatus BaseFrameAllocator::Close()
 {
-    ReleaseResponse(&(m_externalDecoderResponse.m_response));
-    m_externalDecoderResponse.Reset();
-    
-    while (!m_responses.empty())
-    {        
-        ReleaseResponse(&(*m_responses.begin()));
-        m_responses.pop_front();
+    std::list<UniqueResponse> ::iterator i;
+    for (i = m_ExtResponses.begin(); i!= m_ExtResponses.end(); i++)
+    {
+        ReleaseResponse(&*i);
     }
-    
+    m_ExtResponses.clear();
+
+    std::list<mfxFrameAllocResponse> ::iterator i2;
+    for (i2 = m_responses.begin(); i2!= m_responses.end(); i2++)
+    {
+        ReleaseResponse(&*i2);
+    }
+
     return MFX_ERR_NONE;
 }
 
@@ -205,26 +245,47 @@ MFXBufferAllocator::MFXBufferAllocator()
     Unlock = Unlock_;
 }
 
-mfxStatus MFXBufferAllocator::Alloc_(mfxHDL pthis, mfxU32 nbytes, mfxU16 type, mfxMemId* mid)
+MFXBufferAllocator::~MFXBufferAllocator()
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXBufferAllocator*)pthis)->AllocBuffer(nbytes, type, mid);
 }
 
-mfxStatus MFXBufferAllocator::Lock_(mfxHDL pthis, mfxMemId mid, mfxU8** ptr)
+mfxStatus MFXBufferAllocator::Alloc_(mfxHDL pthis, mfxU32 nbytes, mfxU16 type, mfxMemId *mid)
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXBufferAllocator*)pthis)->LockBuffer(mid, ptr);
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXBufferAllocator& self = *(MFXBufferAllocator *)pthis;
+
+    return self.AllocBuffer(nbytes, type, mid);
+}
+
+mfxStatus MFXBufferAllocator::Lock_(mfxHDL pthis, mfxMemId mid, mfxU8 **ptr)
+{
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXBufferAllocator& self = *(MFXBufferAllocator *)pthis;
+
+    return self.LockBuffer(mid, ptr);
 }
 
 mfxStatus MFXBufferAllocator::Unlock_(mfxHDL pthis, mfxMemId mid)
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXBufferAllocator*)pthis)->UnlockBuffer(mid);
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXBufferAllocator& self = *(MFXBufferAllocator *)pthis;
+
+    return self.UnlockBuffer(mid);
 }
 
 mfxStatus MFXBufferAllocator::Free_(mfxHDL pthis, mfxMemId mid)
 {
-    MSDK_CHECK_POINTER(pthis, MFX_ERR_MEMORY_ALLOC);
-    return ((MFXBufferAllocator*)pthis)->FreeBuffer(mid);
+    if (0 == pthis)
+        return MFX_ERR_MEMORY_ALLOC;
+
+    MFXBufferAllocator& self = *(MFXBufferAllocator *)pthis;
+
+    return self.FreeBuffer(mid);
 }
+

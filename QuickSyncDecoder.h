@@ -144,8 +144,8 @@ public:
         return (i < m_nRequiredFramesNum) ? (m_LockedSurfaces[i] > 0 || pSurface->Data.Locked > 0) : true;
     }
 
-    __forceinline bool IsD3DAlloc() { return m_bUseD3DAlloc; }
-    __forceinline bool IsHwAccelerated() { return m_bHwAcceleration; }
+    __forceinline bool IsD3DAlloc() const { return m_bUseD3DAlloc; }
+    __forceinline bool IsHwAccelerated() const { return m_bHwAcceleration; }
 
     mfxStatus LockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
     mfxStatus UnlockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);
