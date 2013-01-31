@@ -35,10 +35,11 @@ typedef enum
     NALU_TYPE_AUD      = 9,
     NALU_TYPE_EOSEQ    = 10,
     NALU_TYPE_EOSTREAM = 11,
-    NALU_TYPE_FILL     = 12
+    NALU_TYPE_FILL     = 12,
+    NALU_TYPE_MAX_VALID = 12
 } NALU_TYPE;
 
-#define IS_VALID_NALU(nalu) (nalu >= NALU_TYPE_SLICE && nalu <= NALU_TYPE_FILL)
+#define IS_VALID_NALU(nalu) (nalu > 0 && nalu <= NALU_TYPE_MAX_VALID)
 
 class CH264Nalu
 {

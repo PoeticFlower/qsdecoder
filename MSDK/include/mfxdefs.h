@@ -96,10 +96,11 @@ typedef enum
     MFX_WRN_PARTIAL_ACCELERATION        = 4,    /* SW is used */
     MFX_WRN_INCOMPATIBLE_VIDEO_PARAM    = 5,    /* incompatible video parameters */
     MFX_WRN_VALUE_NOT_CHANGED           = 6,      /* the value is saturated based on its valid range */
-    MFX_WRN_OUT_OF_RANGE                = 7,      /* the value is out of valid range */   
+    MFX_WRN_OUT_OF_RANGE                = 7,      /* the value is out of valid range */
+    MFX_WRN_FILTER_SKIPPED              = 10,     /* one of requested filters has been skipped */
 
     /* threading statuses */
-    MFX_TASK_DONE = MFX_ERR_NONE, /* task has been completed */ 
+    MFX_TASK_DONE = MFX_ERR_NONE, /* task has been completed */
     MFX_TASK_WORKING = 8, /*  there is some more work to do */
     MFX_TASK_BUSY = 9 /* task is waiting for resources */
 

@@ -4,7 +4,7 @@ INTEL CORPORATION PROPRIETARY INFORMATION
 This software is supplied under the terms of a license agreement or nondisclosure
 agreement with Intel Corporation and may not be copied or disclosed except in
 accordance with the terms of that agreement
-Copyright(c) 2011 Intel Corporation. All Rights Reserved.
+Copyright(c) 2011-2012 Intel Corporation. All Rights Reserved.
 
 
 File Name: mfxplugin++.h
@@ -25,7 +25,7 @@ public:
     virtual mfxStatus mfxGetPluginParam(mfxPluginParam *par) = 0;
     virtual mfxStatus mfxSubmit(const mfxHDL *in, mfxU32 in_num, const mfxHDL *out, mfxU32 out_num, mfxThreadTask *task) = 0;
     virtual mfxStatus mfxExecute(mfxThreadTask task, mfxU32 uid_p, mfxU32 uid_a) = 0;
-    virtual mfxStatus mfxFreeResources(mfxThreadTask task, mfxStatus sts) = 0;    
+    virtual mfxStatus mfxFreeResources(mfxThreadTask task, mfxStatus sts) = 0;
 };
 
 /* Class adapter between "C" structure mfxPlugin and C++ interface MFXPlugin */

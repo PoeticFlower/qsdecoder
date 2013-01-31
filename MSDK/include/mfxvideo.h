@@ -13,9 +13,9 @@ File Name: mfxvideo.h
 #define __MFXVIDEO_H__
 #include "mfxstructures.h"
 
-/* This is the external include file for the Intel(R) Media Sofware Development Kit product */
+/* This is the external include file for the Intel(R) Media Software Development Kit product */
 #define MFX_VERSION_MAJOR 1
-#define MFX_VERSION_MINOR 4
+#define MFX_VERSION_MINOR 6
 
 #ifdef _WIN32
     #define MFX_CDECL __cdecl
