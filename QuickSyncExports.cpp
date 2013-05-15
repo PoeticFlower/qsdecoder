@@ -88,7 +88,7 @@ DWORD __stdcall check()
 {
     mfxVersion apiVersion = {1, 1};
     MFXVideoSession* pSession = new MFXVideoSession;
-    mfxIMPL impl = MFX_IMPL_AUTO_ANY;
+    mfxIMPL impl = MFX_IMPL_AUTO_ANY | MFX_IMPL_VIA_ANY;
     mfxStatus sts = pSession->Init(impl, &apiVersion);
     MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, QS_CAP_UNSUPPORTED);
     pSession->QueryIMPL(&impl);

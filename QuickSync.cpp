@@ -68,7 +68,6 @@ CQuickSync::CQuickSync() :
     strcpy(m_CodecName, "Intel\xae QuickSync Decoder");
 
     mfxStatus sts = MFX_ERR_NONE;
-    m_pDecoder = new CQuickSyncDecoder(sts);
 
     MSDK_ZERO_VAR(m_DecVideoParams);
     //m_DecVideoParams.AsyncDepth = 0; // Causes issues when 1 - in old drivers
@@ -107,7 +106,11 @@ CQuickSync::CQuickSync() :
 //    m_Config.nVppDenoiseStrength     = 16; // 0-64
 
 //    m_Config.bDropDuplicateFrames = true;
-        
+    
+    //m_Config.bEnableD3D11 = true;
+
+    m_pDecoder = new CQuickSyncDecoder(m_Config, sts);
+
     m_OK = (sts == MFX_ERR_NONE);
 }
 
@@ -703,7 +706,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
     }
 
     if (SUCCEEDED(hr) && !m_bNeedToFlush)
-        m_pFrameConstructor->SaveResidialData(&mfxBS);
+        m_pFrameConstructor->SaveResidualData(&mfxBS);
     
     MSDK_SAFE_DELETE_ARRAY(mfxBS.Data);
 

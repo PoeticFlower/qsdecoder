@@ -58,21 +58,21 @@ CFrameConstructor::CFrameConstructor()
 {
     m_bSeqHeaderInserted = false;
     m_bDvdStripPackets = false;
-    MSDK_ZERO_VAR(m_ResidialBS);
+    MSDK_ZERO_VAR(m_ResidualBS);
     MSDK_ZERO_VAR(m_Headers);
-    m_ResidialBS.MaxLength = 100;
-    m_ResidialBS.Data = new mfxU8[m_ResidialBS.MaxLength];
+    m_ResidualBS.MaxLength = 100;
+    m_ResidualBS.Data = new mfxU8[m_ResidualBS.MaxLength];
 }
 
 CFrameConstructor::~CFrameConstructor() 
 {
-    delete[] m_ResidialBS.Data;
+    delete[] m_ResidualBS.Data;
     delete[] m_Headers.Data;
 }
 
 void CFrameConstructor::Reset()
 {
-    m_ResidialBS.DataOffset = m_ResidialBS.DataLength = 0;
+    m_ResidualBS.DataOffset = m_ResidualBS.DataLength = 0;
     m_bSeqHeaderInserted = false;
 }
 
@@ -85,26 +85,26 @@ void CFrameConstructor::UpdateTimeStamp(IMediaSample* pSample, mfxBitstream* pBS
          MFX_TIME_STAMP_INVALID;         
 }
 
-void CFrameConstructor::SaveResidialData(mfxBitstream* pBS)
+void CFrameConstructor::SaveResidualData(mfxBitstream* pBS)
 {
     MSDK_CHECK_POINTER_NO_RET(pBS);
-    // m_ResidialBS must be empty
-    ASSERT(m_ResidialBS.DataLength == 0);
-    m_ResidialBS.DataOffset = 0;
-    m_ResidialBS.DataLength = pBS->DataLength;
+    // m_ResidualBS must be empty
+    ASSERT(m_ResidualBS.DataLength == 0);
+    m_ResidualBS.DataOffset = 0;
+    m_ResidualBS.DataLength = pBS->DataLength;
     
     // Check if a bigger buffer is needed
-    if (pBS->DataLength > m_ResidialBS.MaxLength)
+    if (pBS->DataLength > m_ResidualBS.MaxLength)
     {
-        delete[] m_ResidialBS.Data;
+        delete[] m_ResidualBS.Data;
         mfxU32 newSize = pBS->DataLength;
-        m_ResidialBS.Data = new mfxU8[newSize];
-        MSDK_CHECK_POINTER_NO_RET(m_ResidialBS.Data);
-        m_ResidialBS.MaxLength = newSize;
+        m_ResidualBS.Data = new mfxU8[newSize];
+        MSDK_CHECK_POINTER_NO_RET(m_ResidualBS.Data);
+        m_ResidualBS.MaxLength = newSize;
     }
 
     ASSERT(pBS->DataOffset + pBS->DataLength <= pBS->MaxLength);
-    memcpy(m_ResidialBS.Data, pBS->Data + pBS->DataOffset, pBS->DataLength);
+    memcpy(m_ResidualBS.Data, pBS->Data + pBS->DataOffset, pBS->DataLength);
 }
 
 mfxStatus CFrameConstructor::ConstructHeaders(
@@ -149,9 +149,9 @@ mfxStatus CFrameConstructor::ConstructHeaders(
 
 mfxStatus CFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS)
 {
-    mfxStatus sts = MFX_ERR_NONE;
-    mfxU8*          pDataBuffer = NULL;
-    int             nDataSize   = 0;
+    mfxStatus sts         = MFX_ERR_NONE;
+    mfxU8*    pDataBuffer = NULL;
+    int       nDataSize   = 0;
 
     MSDK_CHECK_POINTER(pSample, MFX_ERR_NULL_PTR);
     nDataSize = pSample->GetActualDataLength();
@@ -169,7 +169,7 @@ mfxStatus CFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstream*
     }
 
     // Prefix the sequence headers if needed
-    size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
+    size_t newDataSize = nDataSize + m_ResidualBS.DataLength +
                 ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength);
 
     pBS->MaxLength = pBS->DataLength = (mfxU32)newDataSize;
@@ -291,11 +291,11 @@ void CFrameConstructor::StripDvdPacket(BYTE*& p, int& len)
 
 void CFrameConstructor::WriteResidualData(mfxU8*& pData)
 {
-    if (m_ResidialBS.DataLength)
+    if (m_ResidualBS.DataLength)
     {
-        memcpy(pData, m_ResidialBS.Data, m_ResidialBS.DataLength);
-        pData += m_ResidialBS.DataLength;
-        m_ResidialBS.DataLength = 0;
+        memcpy(pData, m_ResidualBS.Data, m_ResidualBS.DataLength);
+        pData += m_ResidualBS.DataLength;
+        m_ResidualBS.DataLength = 0;
     }
 }
 
@@ -380,7 +380,7 @@ mfxStatus CVC1FrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     UpdateTimeStamp(pSample, pBS);
 
     // Prefix the sequence headers if needed
-    size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
+    size_t newDataSize = nDataSize + m_ResidualBS.DataLength +
         ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength) + // Add headers size 
         8; // Add upto 8 bytes for extra start codes
 
@@ -599,7 +599,7 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     // Update data size
     nDataSize = (mfxU32)m_TempBuffer.size();
     pDataBuffer = &m_TempBuffer.front();
-    size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
+    size_t newDataSize = nDataSize + m_ResidualBS.DataLength +
         ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength);
 
     mfxU8* pData = pBS->Data = new mfxU8[newDataSize];

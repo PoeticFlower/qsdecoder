@@ -28,54 +28,29 @@
 
 #pragma once
 
-#include "base_allocator.h"
+#if MFX_D3D11_SUPPORT
+#include "hw_device.h"
 
-enum eTypeHandle
-{
-    DXVA2_PROCESSOR     = 0x00,
-    DXVA2_DECODER       = 0x01
-};
-
-struct D3DAllocatorParams : mfxAllocatorParams
-{
-    IDirect3DDeviceManager9 *pManager;
-    DWORD surfaceUsage;
-
-    D3DAllocatorParams()
-        : pManager()
-        , surfaceUsage()
-    {
-    }
-
-};
-
-class D3DFrameAllocator : public BaseFrameAllocator
+class CD3D11Device: public CHWDevice
 {
 public:
-    D3DFrameAllocator();
-    virtual ~D3DFrameAllocator();    
-
-    virtual mfxStatus Init(mfxAllocatorParams *pParams);
-    virtual mfxStatus Close();
-
-    virtual IDirect3DDeviceManager9* GetDeviceManager()
-    {
-        return m_manager;
-    }
-
-    virtual mfxStatus LockFrame(mfxMemId mid, mfxFrameData *ptr);
-    virtual mfxStatus UnlockFrame(mfxMemId mid, mfxFrameData *ptr);
-    virtual mfxStatus GetFrameHDL(mfxMemId mid, mfxHDL *handle);
-
+    CD3D11Device();
+    virtual ~CD3D11Device();
+    virtual mfxStatus Init(int nAdapterNum);
+    virtual mfxStatus Reset();
+    virtual mfxHDL    GetHandle(mfxHandleType type);
+    virtual void      Close();
 protected:
-    virtual mfxStatus CheckRequestType(mfxFrameAllocRequest *request);
-    virtual mfxStatus ReleaseResponse(mfxFrameAllocResponse *response);
-    virtual mfxStatus AllocImpl(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response);
-   
-    CComPtr<IDirect3DDeviceManager9> m_manager;
-    CComPtr<IDirectXVideoDecoderService> m_decoderService;
-    CComPtr<IDirectXVideoProcessorService> m_processorService;
-    HANDLE m_hDecoder;
-    HANDLE m_hProcessor;
-    DWORD m_surfaceUsage;
+    virtual mfxStatus FillSCD(mfxHDL hWindow, DXGI_SWAP_CHAIN_DESC& scd);
+
+    CComPtr<ID3D11Device>                   m_pD3D11Device;
+    CComPtr<ID3D11DeviceContext>            m_pD3D11Ctx;
+    CComQIPtr<ID3D11VideoDevice>            m_pDX11VideoDevice;
+    CComQIPtr<ID3D11VideoContext>           m_pVideoContext;
+
+    CComQIPtr<IDXGIDevice1>                 m_pDXGIDev;
+    CComQIPtr<IDXGIAdapter>                 m_pAdapter;
+
+    CComPtr<IDXGIFactory2>                  m_pDXGIFactory;
 };
+#endif //#if MFX_D3D11_SUPPORT

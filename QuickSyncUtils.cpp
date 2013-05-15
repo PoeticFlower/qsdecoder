@@ -34,6 +34,23 @@
 static bool s_SSE4_1_enabled = IsSSE41Enabled();
 static bool s_AVX2_enabled = IsAVX2Enabled();
 
+static const
+struct
+{
+    // actual implementation
+    mfxIMPL impl;
+    // adapter's number
+    int adapterID;
+
+} implTypes[] =
+{
+    {MFX_IMPL_HARDWARE, 0},
+    {MFX_IMPL_SOFTWARE, -1},
+    {MFX_IMPL_HARDWARE2, 1},
+    {MFX_IMPL_HARDWARE3, 2},
+    {MFX_IMPL_HARDWARE4, 3}
+};
+
 // gpu_memcpy_sse41 is a memcpy style function that copied data very fast from a
 // GPU tiled memory (uncached speculative write back memory)
 // Performance tip: page offset (12 lsb) of both addresses should be different
@@ -476,4 +493,68 @@ void* mt_gpu_memcpy(void* d, const void* s, size_t size)
     return (s_AVX2_enabled) ?
         mt_copy(d, s, size, gpu_memcpy_avx2) :
         mt_copy(d, s, size, gpu_memcpy_sse41);
+}
+
+int GetIntelAdapterIdD3D9(IDirect3D9* _pd3d)
+{
+    CComPtr<IDirect3D9> pd3d = _pd3d;
+    if (!pd3d)
+    {
+        pd3d = Direct3DCreate9(D3D_SDK_VERSION);
+        if (!pd3d) return -1;
+    }
+
+    unsigned adapterCount = (int)pd3d->GetAdapterCount();
+    D3DADAPTER_IDENTIFIER9 adIdentifier;
+    for (int i = adapterCount-1; i >= 0; --i)
+    {
+        HRESULT hr = pd3d->GetAdapterIdentifier(i, 0, &adIdentifier);
+        if (SUCCEEDED(hr))
+        {
+            // Look for Intel's vendor ID (8086h)
+            if (adIdentifier.VendorId == 0x8086)
+                return i;
+        }
+    }
+
+    return -1;
+}
+
+// Get the ID of the adapter (GPU) associated with an MSDK session, -1 for SW session
+int GetMSDKAdapterNumber(mfxSession session)
+{
+    int adapterNum = -1; // SW
+    mfxIMPL impl = MFX_IMPL_SOFTWARE; // default in case no HW IMPL is found
+
+    // we don't care for error codes in further code; if something goes wrong we fall back to the default adapter
+    if (session)
+    {
+        MFXQueryIMPL(session, &impl);
+    }
+    else
+    {
+        // an auxiliary session, internal for this function
+        mfxSession auxSession;
+        memset(&auxSession, 0, sizeof(auxSession));
+
+        mfxVersion ver = {1, 1}; // minimum API version which supports multiple devices
+        MFXInit(MFX_IMPL_HARDWARE_ANY, &ver, &auxSession);
+        MFXQueryIMPL(auxSession, &impl);
+        MFXClose(auxSession);
+    }
+
+    // extract the base implementation type
+    mfxIMPL baseImpl = MFX_IMPL_BASETYPE(impl);
+
+    // get corresponding adapter number
+    for (mfxU8 i = 0; i < sizeof(implTypes)/sizeof(implTypes[0]); ++i)
+    {
+        if (implTypes[i].impl == baseImpl)
+        {
+            adapterNum = implTypes[i].adapterID;
+            break;
+        }
+    }
+
+    return adapterNum;
 }

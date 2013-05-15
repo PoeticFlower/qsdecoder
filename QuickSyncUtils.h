@@ -62,6 +62,12 @@ bool IsAVX2Enabled();
 // Set current thread name in VS debugger
 void SetThreadName(LPCSTR szThreadName, DWORD dwThreadID = -1 /* current thread */);
 
+// Get an Intel GPU ID using Direct3D9 (screen must be connected to Intel GPU)
+int GetIntelAdapterIdD3D9(IDirect3D9* _pd3d);
+
+// Get the ID of the adapter (GPU) associated with an MSDK session, -1 for SW session
+int GetMSDKAdapterNumber(mfxSession session);
+
 #ifdef _DEBUG
 // Print assert to debugger output
 void DebugAssert(const TCHAR *pCondition,const TCHAR *pFileName, int iLine);
