@@ -36,7 +36,7 @@ public:
     virtual mfxStatus ConstructHeaders(VIDEOINFOHEADER2* vih, const GUID& guidFormat, size_t nMtSize, size_t nVideoInfoSize);
     virtual mfxStatus ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS);
     virtual void Reset();
-    void SaveResidialData(mfxBitstream* pBS);
+    void SaveResidualData(mfxBitstream* pBS);
     inline mfxBitstream& GetHeaders() { return m_Headers; }
     void SetDvdPacketStripping(bool stripPackets) { m_bDvdStripPackets = stripPackets; }
 
@@ -50,7 +50,7 @@ protected:
     bool m_bSeqHeaderInserted;
     bool m_bDvdStripPackets;
     mfxBitstream m_Headers; 
-    mfxBitstream m_ResidialBS;
+    mfxBitstream m_ResidualBS;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////

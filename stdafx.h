@@ -14,9 +14,24 @@
 
 // Platform SDK
 #include <d3d9.h>
+#include <d3d11.h>
 #include <dshow.h>
 #include <dvdmedia.h>
 #include <initguid.h>
+#include <atlbase.h>
+#include <dxva2api.h>
+#include <dxgi1_2.h>
+#include <sdkddkver.h>
+#if (NTDDI_VERSION >= NTDDI_VERSION_FROM_WIN32_WINNT2(0x0602)) // >= _WIN32_WINNT_WIN8
+    #define MFX_D3D11_SUPPORT 1 // Enable D3D11 support if SDK allows
+    #pragma message("\nIntel QuickSync Decoder is built with D3D11 support\n")
+#else
+    #define MFX_D3D11_SUPPORT 0
+    #pragma message("\nWarning: Intel QuickSync Decoder is built without D3D11 support!")
+    #pragma message("\tMust have Windows SDK 8.0 installed and environment variable INTELMEDIASDK_WINSDK_PATH")
+    #pragma message("\tshould point to it.")
+    #pragma message("\te.g. \"C:\\Program Files (x86)\\Windows Kits\\8.0\"")
+#endif
 
 // Intel Media SDK
 #include <mfxvideo++.h>
@@ -26,8 +41,9 @@
 #include <vector>
 #include <deque>
 #include <set>
-#include <algorithm>
 #include <array>
+#include <limits>
+#include <map>
 
 // PPL
 #include <ppl.h>

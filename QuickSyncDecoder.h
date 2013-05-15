@@ -28,7 +28,9 @@
 
 #pragma once
 
+#include "hw_device.h"
 #include "d3d_allocator.h"
+#include "d3d11_allocator.h"
 #include "sysmem_allocator.h"
 
 typedef std::deque<mfxFrameSurface1*> TSurfaceQueue;
@@ -36,7 +38,7 @@ typedef std::deque<mfxFrameSurface1*> TSurfaceQueue;
 class CQuickSyncDecoder 
 {
 public:
-    CQuickSyncDecoder(mfxStatus& sts);
+    CQuickSyncDecoder(const CQsConfig& cfg, mfxStatus& sts);
     ~CQuickSyncDecoder();
 
     mfxStatus Init(mfxVideoParam* pVideoParams, mfxU32 nPitch)
@@ -51,11 +53,7 @@ public:
 
     mfxStatus Decode(mfxBitstream* pBS, mfxFrameSurface1*& pOutSurface);
     mfxStatus GetVideoParams(mfxVideoParam* pVideoParams);
-    IDirect3DDeviceManager9* GetD3DDeviceManager()
-    {
-        return m_pD3dDeviceManager;
-    }
-
+    IDirect3DDeviceManager9* GetD3DDeviceManager();
     bool SetD3DDeviceManager(IDirect3DDeviceManager9* pDeviceManager);
 
     mfxStatus CreateAllocator();
@@ -161,7 +159,6 @@ protected:
     mfxStatus         InternalReset(mfxVideoParam* pVideoParams, mfxU32 nPitch, bool bInited);
     mfxStatus         InitSession(mfxIMPL impl);
     void              CloseSession();
-    mfxStatus         InitD3D();
     mfxStatus         InitD3DFromRenderer();
     void              CloseD3D();
 
@@ -183,13 +180,12 @@ protected:
     mfxFrameAllocResponse m_AllocResponse;
     mfxU16                m_nRequiredFramesNum;
     bool                  m_bUseD3DAlloc;
+    bool                  m_bUseD3D11Alloc;
     mfxU16                m_nAuxFrameCount;
 
     // D3D/DXVA interfaces
     IDirect3DDeviceManager9* m_pRendererD3dDeviceManager;
-    IDirect3DDeviceManager9* m_pD3dDeviceManager; 
-    IDirect3DDevice9*        m_pD3dDevice;
-    UINT                     m_ResetToken;
+    CHWDevice*               m_HwDevice;
 
     TSurfaceQueue m_OutputSurfaceQueue;
     volatile LONG m_LockedSurfaces[MAX_SURFACES];
