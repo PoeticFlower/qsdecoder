@@ -106,14 +106,27 @@ CQuickSync::CQuickSync() :
 //    m_Config.nVppDenoiseStrength     = 16; // 0-64
 
 //    m_Config.bDropDuplicateFrames = true;
-    
-#if MFX_D3D11_SUPPORT
-//    m_Config.bEnableD3D11 = true;
-#endif
 
+    DWORD dwVersion = GetVersion();
+    DWORD dwMajorVersion = (DWORD)(LOBYTE(LOWORD(dwVersion)));
+    DWORD dwMinorVersion = (DWORD)(HIBYTE(LOWORD(dwVersion)));
+    // No QS support for Windows version older than Vista
+    if (dwMajorVersion < 6)
+    {
+        sts = MFX_ERR_UNSUPPORTED;
+        return;
+    }
+    // D3D11 decode was introduced with Win8 (Windows 6.2)
+    // Window Vidta and 7 can use D3D9
+    else if ((dwMajorVersion == 6 && dwMinorVersion >= 2) || (dwMajorVersion > 6))
+    {
+#if MFX_D3D11_SUPPORT
+        m_Config.bEnableD3D11 = true;
+#endif
+    }
     m_pDecoder = new CQuickSyncDecoder(m_Config, sts);
 
-    m_OK = (sts == MFX_ERR_NONE);
+    m_OK = MSDK_SUCCEEDED(sts);
 }
 
 CQuickSync::~CQuickSync()
@@ -243,11 +256,11 @@ HRESULT CQuickSync::TestMediaType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     MSDK_SAFE_DELETE(pFrameConstructor);
     MSDK_CHECK_RESULT_P_RET(hr, S_OK);
 
-    // If SW emulation is disabled - check if HW accelaration is supported
+    // If SW emulation is disabled - check if HW acceleration is supported
     if (!m_Config.bEnableSwEmulation)
     {
         mfxStatus sts = m_pDecoder->CheckHwAcceleration(&videoParams);
-        if (sts != MFX_ERR_NONE)
+        if (MSDK_FAILED(sts))
         {
             MSDK_TRACE("HW accelration is not supported. Aborting!\n");
             hr = E_FAIL;
@@ -350,19 +363,19 @@ HRESULT CQuickSync::DecodeHeader(
     if (nVideoInfoSize < nSampleSize)
     {
         sts = pFrameConstructor->ConstructHeaders(vih2, guidFormat, nSampleSize, nVideoInfoSize);
-        if (MFX_ERR_NONE == sts)
+        if (MSDK_SUCCEEDED(sts))
         {
             sts = m_pDecoder->DecodeHeader(&pFrameConstructor->GetHeaders(), &videoParams);
-            if (sts != MFX_ERR_NONE)
+            if (MSDK_FAILED(sts))
             {
                 MSDK_TRACE("QsDecoder: Warning DecodeHeader failed!\n");
-//            ASSERT(sts == MFX_ERR_NONE);
+//            ASSERT(MSDK_SUCCEEDED(sts));
             }
         }
     }
     
     // Simple info header (without extra data) or DecodeHeader failed (usually not critical, in many cases header will appear later in the stream)
-    if (nVideoInfoSize == nSampleSize || sts != MFX_ERR_NONE)
+    if (nVideoInfoSize == nSampleSize || MSDK_FAILED(sts))
     {
         mfx.FrameInfo.CropW        = (mfxU16)vih2->bmiHeader.biWidth;
         mfx.FrameInfo.CropH        = (mfxU16)vih2->bmiHeader.biHeight;
@@ -388,7 +401,7 @@ HRESULT CQuickSync::DecodeHeader(
         sts = MFX_ERR_NONE;
     }
 
-    hr = (sts == MFX_ERR_NONE) ? S_OK : E_FAIL;
+    hr = (MSDK_SUCCEEDED(sts)) ? S_OK : E_FAIL;
 
     if (FAILED(hr))
     {
@@ -521,7 +534,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     // Initialization of Media SDK decoder is done in OnSeek to allow late initialization needed
     // by full screen exclusive (FSE) mode since D3D devices can't be created. The DS filter must send
     // the D3D device manager to this decoder for surface allocation.
-    if (sts == MFX_ERR_NONE)
+    if (MSDK_SUCCEEDED(sts))
     {
         m_pDecoder->SetConfig(m_Config);
         size_t surfaceCount = max(8, m_Config.nOutputQueueLength);
@@ -538,7 +551,7 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         "Intel\xae QuickSync Decoder (%s)" , ::GetCodecName(m_DecVideoParams.mfx.CodecId));
 
     delete[] (mfxU8*)vih2;
-    m_OK = (sts == MFX_ERR_NONE);
+    m_OK = MSDK_SUCCEEDED(sts);
     return (m_OK) ? S_OK : E_FAIL;
 }
 
@@ -558,7 +571,7 @@ void CQuickSync::SetAspectRatio(VIDEOINFOHEADER2& vih2, mfxFrameInfo& frameInfo)
             frameInfo.CropW, frameInfo.CropH,
             frameInfo.AspectRatioW, frameInfo.AspectRatioH);
 
-        if (sts != MFX_ERR_NONE)
+        if (MSDK_FAILED(sts))
         {
             frameInfo.AspectRatioW = frameInfo.AspectRatioH = 1;
         }
@@ -625,7 +638,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
         // Decode the bitstream
         sts = m_pDecoder->Decode(&mfxBS, pSurfaceOut);                
 
-        if (MFX_ERR_NONE == sts)
+        if (MSDK_SUCCEEDED(sts))
         {
             // Sync decode - pSurfaceOut holds decoded surface
             if (NULL != pSurfaceOut)
@@ -690,7 +703,7 @@ HRESULT CQuickSync::Decode(IMediaSample* pSample)
             memcpy(&m_DecVideoParams, &VideoParams, sizeof(mfxVideoParam));
             m_nPitch = MSDK_ALIGN32(m_DecVideoParams.mfx.FrameInfo.Width);
             sts = m_pDecoder->Reset(&m_DecVideoParams, m_nPitch);
-            if (MFX_ERR_NONE == sts)
+            if (MSDK_SUCCEEDED(sts))
             {
                 continue;
             }
@@ -879,12 +892,12 @@ HRESULT CQuickSync::Flush(bool deliverFrames)
     FlushOutputQueue();
 
     // Flush HW decoder by sending NULL bitstreams.
-    while (MFX_ERR_NONE == sts || MFX_ERR_MORE_SURFACE == sts)
+    while (MSDK_SUCCEEDED(sts) || MFX_ERR_MORE_SURFACE == sts)
     {
         mfxFrameSurface1* pSurf = NULL;
         sts = m_pDecoder->Decode(NULL, pSurf);
 
-        if (MFX_ERR_NONE == sts && !m_bNeedToFlush)
+        if (MSDK_SUCCEEDED(sts) && !m_bNeedToFlush)
         {
             ProcessDecodedFrame(pSurf);
         }
@@ -953,7 +966,7 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME /* segmentStart */)
     }
 
     sts = m_pDecoder->Reset(&m_DecVideoParams, m_nPitch);
-    if (sts != MFX_ERR_NONE)
+    if (MSDK_FAILED(sts))
     {
         MSDK_TRACE("QsDecoder: reset failed!\n");
         return E_FAIL;
@@ -964,7 +977,7 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME /* segmentStart */)
 
     m_bNeedToFlush = false;
     MSDK_TRACE("QsDecoder: OnSeek complete\n");
-    return (sts == MFX_ERR_NONE) ? S_OK : E_FAIL;
+    return (MSDK_SUCCEEDED(sts)) ? S_OK : E_FAIL;
 }
 
 bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStart)

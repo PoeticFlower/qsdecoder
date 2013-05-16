@@ -126,7 +126,7 @@ mfxStatus BaseFrameAllocator::AllocFrames(mfxFrameAllocRequest *request, mfxFram
     if (0 == request || 0 == response || 0 == request->NumFrameSuggested)
         return MFX_ERR_MEMORY_ALLOC; 
 
-    if (MFX_ERR_NONE != CheckRequestType(request))
+    if (MSDK_FAILED(CheckRequestType(request)))
         return MFX_ERR_UNSUPPORTED;
 
     mfxStatus sts = MFX_ERR_NONE;
@@ -152,7 +152,7 @@ mfxStatus BaseFrameAllocator::AllocFrames(mfxFrameAllocRequest *request, mfxFram
         else
         {
             sts = AllocImpl(request, response);
-            if (sts == MFX_ERR_NONE)
+            if (MSDK_SUCCEEDED(sts))
             {
                 m_ExtResponses.push_back(UniqueResponse(*response, request->Info.CropW, request->Info.CropH, request->Type & MEMTYPE_FROM_MASK));
             }
@@ -166,7 +166,7 @@ mfxStatus BaseFrameAllocator::AllocFrames(mfxFrameAllocRequest *request, mfxFram
         m_responses.push_back(mfxFrameAllocResponse());
 
         sts = AllocImpl(request, response);
-        if (sts == MFX_ERR_NONE)
+        if (MSDK_SUCCEEDED(sts))
         {
             m_responses.back() = *response;
         }

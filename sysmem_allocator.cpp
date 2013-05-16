@@ -97,7 +97,7 @@ mfxStatus SysMemFrameAllocator::LockFrame(mfxMemId mid, mfxFrameData *ptr)
     sFrame *fs = 0;
     mfxStatus sts = m_pBufferAllocator->Lock(m_pBufferAllocator->pthis, mid,(mfxU8 **)&fs);
 
-    if (MFX_ERR_NONE != sts) 
+    if (MSDK_FAILED(sts)) 
         return sts;
    
     if (ID_FRAME != fs->id) 
@@ -152,7 +152,7 @@ mfxStatus SysMemFrameAllocator::UnlockFrame(mfxMemId mid, mfxFrameData *ptr)
 
     mfxStatus sts = m_pBufferAllocator->Unlock(m_pBufferAllocator->pthis, mid);
 
-    if (MFX_ERR_NONE != sts) 
+    if (MSDK_FAILED(sts)) 
         return sts;
 
     if (NULL != ptr)
@@ -174,7 +174,7 @@ mfxStatus SysMemFrameAllocator::GetFrameHDL(mfxMemId mid, mfxHDL *handle)
 mfxStatus SysMemFrameAllocator::CheckRequestType(mfxFrameAllocRequest *request)
 {
     mfxStatus sts = BaseFrameAllocator::CheckRequestType(request);
-    if (MFX_ERR_NONE != sts)
+    if (MSDK_FAILED(sts))
         return sts;
 
     if ((request->Type & MFX_MEMTYPE_SYSTEM_MEMORY) != 0)
@@ -223,13 +223,13 @@ mfxStatus SysMemFrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFram
         mfxStatus sts = m_pBufferAllocator->Alloc(m_pBufferAllocator->pthis, 
             nbytes + MSDK_ALIGN32(sizeof(sFrame)), request->Type, &(mids.get()[numAllocated]));
 
-        if (MFX_ERR_NONE != sts) 
+        if (MSDK_FAILED(sts)) 
             break;
 
         sFrame *fs;
         sts = m_pBufferAllocator->Lock(m_pBufferAllocator->pthis, mids.get()[numAllocated], (mfxU8 **)&fs);
 
-        if (MFX_ERR_NONE != sts) 
+        if (MSDK_FAILED(sts)) 
             break;
 
         fs->id = ID_FRAME;
@@ -266,7 +266,7 @@ mfxStatus SysMemFrameAllocator::ReleaseResponse(mfxFrameAllocResponse *response)
             if (response->mids[i])
             {             
                 sts = m_pBufferAllocator->Free(m_pBufferAllocator->pthis, response->mids[i]);
-                if (MFX_ERR_NONE != sts)
+                if (MSDK_FAILED(sts))
                     return sts;
             }
         }

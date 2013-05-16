@@ -276,7 +276,7 @@ mfxStatus D3D11FrameAllocator::GetFrameHDL(mfxMemId mid, mfxHDL *handle)
 mfxStatus D3D11FrameAllocator::CheckRequestType(mfxFrameAllocRequest *request)
 {    
     mfxStatus sts = BaseFrameAllocator::CheckRequestType(request);
-    if (MFX_ERR_NONE != sts)
+    if (MSDK_FAILED(sts))
         return sts;
 
     if ((request->Type & (MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET | MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET)) != 0)

@@ -105,7 +105,7 @@ DWORD __stdcall check()
         // Test SW emulation
         pSession->Close();
         sts = pSession->Init(MFX_IMPL_SOFTWARE, &apiVersion);
-        if (MFX_ERR_NONE == sts)
+        if (MSDK_SUCCEEDED(sts))
         {
             caps |= QS_CAP_SW_EMULATION;
         }
