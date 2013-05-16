@@ -143,6 +143,7 @@ public:
     }
 
     __forceinline bool IsD3DAlloc() const { return m_bUseD3DAlloc; }
+    __forceinline bool IsD3D11Alloc() const { return m_bUseD3D11Alloc; }
     __forceinline bool IsHwAccelerated() const { return m_bHwAcceleration; }
 
     mfxStatus LockFrame(mfxFrameSurface1* pSurface, mfxFrameData* pFrameData);

@@ -1369,12 +1369,12 @@ void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData
 #ifdef _DEBUG
     // Debug only - mark top left corner: when working with D3D
     ULONGLONG markY = 0;
-    ULONGLONG markUV = (m_pDecoder->IsHwAccelerated()) ? 0x80FF80FF80FF80FF : 0xFF80FF80FF80FF80;
+    ULONGLONG markUV = (m_pDecoder->IsHwAccelerated()) ? ((m_pDecoder->IsD3D11Alloc()) ? 0xFFFFFFFFFFFFFFFF : 0x80FF80FF80FF80FF) : 0xFF80FF80FF80FF80;
     *((ULONGLONG*)outFrameData.y) = markY;
     *((ULONGLONG*)(outFrameData.y + outFrameData.dwStride)) = markY;
     *((ULONGLONG*)(outFrameData.y + 2 * outFrameData.dwStride)) = markY;
     *((ULONGLONG*)(outFrameData.y + 3 * outFrameData.dwStride)) = markY;
-    *((ULONGLONG*)outFrameData.u) = markUV; // 4 blue (hw) or red (sw)
+    *((ULONGLONG*)outFrameData.u) = markUV; // 4 blue (hw - D3D9) or red (sw) or pink (D3D11)
     *((ULONGLONG*)(outFrameData.u + outFrameData.dwStride)) = markUV;
 #endif
 }

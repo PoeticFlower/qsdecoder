@@ -51,7 +51,7 @@ CQuickSyncDecoder::CQuickSyncDecoder(const CQsConfig& cfg, mfxStatus& sts) :
 
     m_ApiVersion.Major = MIN_REQUIRED_API_VER_MAJOR;
     m_ApiVersion.Minor = MIN_REQUIRED_API_VER_MINOR;
-    mfxIMPL impl = MFX_IMPL_AUTO_ANY;
+    mfxIMPL impl = MFX_IMPL_HARDWARE_ANY;
     impl |= (m_Config.bEnableD3D11) ? MFX_IMPL_VIA_D3D11 : MFX_IMPL_VIA_D3D9;
 
     // Uncomment for SW emulation (Media SDK software DLL must be present)
@@ -93,7 +93,26 @@ mfxStatus CQuickSyncDecoder::InitSession(mfxIMPL impl)
     m_bHwAcceleration = m_mfxImpl != MFX_IMPL_SOFTWARE;
     m_bUseD3DAlloc = m_bHwAcceleration;
     m_bUseD3D11Alloc = m_bUseD3DAlloc && ((m_mfxImpl & MFX_IMPL_VIA_D3D11) == MFX_IMPL_VIA_D3D11);
+
     m_pmfxDEC = new MFXVideoDECODE((mfxSession)*m_mfxVideoSession);
+
+#if MFX_D3D11_SUPPORT
+    if (m_bUseD3D11Alloc)
+    {
+        int nAdapterID = GetMSDKAdapterNumber(*m_mfxVideoSession);
+
+        m_HwDevice = new CD3D11Device();
+        if (MFX_ERR_NONE != (sts = m_HwDevice->Init(nAdapterID)))
+        {
+            MSDK_TRACE("QsDecoder: D3D11 init have failed!\n");
+            MSDK_SAFE_DELETE(m_HwDevice);
+            return sts;
+        }
+
+        mfxHDL h = m_HwDevice->GetHandle(MFX_HANDLE_D3D11_DEVICE);
+        sts = m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D11_DEVICE, h);
+    }
+#endif
 
     MSDK_ZERO_MEMORY((void*)&m_LockedSurfaces, sizeof(m_LockedSurfaces));
     return MFX_ERR_NONE;
@@ -562,13 +581,10 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
         if (m_bUseD3D11Alloc)
         {
 #if MFX_D3D11_SUPPORT
-            m_HwDevice = new CD3D11Device();
-            if (MFX_ERR_NONE != (sts = m_HwDevice->Init(nAdapterID)))
-            {
-                MSDK_TRACE("QsDecoder: D3D11 init have failed!\n");
-                MSDK_SAFE_DELETE(m_HwDevice);
-                return sts;
-            }
+            // HW device must be initialized early - within session init.
+            // If a call to DecodeHeader was called before session->SetHandle, SetHandle would fail.
+            ASSERT(m_HwDevice);
+
             D3D11AllocatorParams* p = new D3D11AllocatorParams;
             p->pDevice = (ID3D11Device*)m_HwDevice->GetHandle(MFX_HANDLE_D3D11_DEVICE);
             pParam.reset(p);
@@ -588,21 +604,16 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
                 return sts;
             }
 
+            // Set the pointer to the HW device (or device manager) to the session
+            mfxHDL h = m_HwDevice->GetHandle(MFX_HANDLE_D3D11_DEVICE);
+            sts = m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D11_DEVICE, h);
+            MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, sts);
+
             D3DAllocatorParams* p = new D3DAllocatorParams;
-            p->pManager = (IDirect3DDeviceManager9*)m_HwDevice->GetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER);
+            p->pManager = (IDirect3DDeviceManager9*)h;
             pParam.reset(p);
             m_pFrameAllocator = new D3DFrameAllocator();
         }
-
-        if (sts != MFX_ERR_NONE)
-        {
-            return sts;
-        }
-
-        // Set the pointer to the HW device (or device manager) to the session
-        mfxHandleType hType = (m_bUseD3D11Alloc) ? MFX_HANDLE_D3D11_DEVICE : MFX_HANDLE_D3D9_DEVICE_MANAGER;
-        mfxHDL h = m_HwDevice->GetHandle(hType);
-        m_mfxVideoSession->SetHandle(hType, h);
     }
     // Setup allocator - No HW acceleration
     else
