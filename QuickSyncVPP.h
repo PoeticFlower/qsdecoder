@@ -104,7 +104,7 @@ protected:
     mfxFrameAllocResponse m_AllocResponse;
     mfxU16                m_nRequiredFramesNum;
     bool                  m_bUseD3DAlloc;
-    volatile LONG         m_LockedSurfaces[MAX_SURFACES];
+    volatile LONG         m_LockedSurfaces[MSDK_MAX_SURFACES];
 
     CQsLock  m_csLock;
 

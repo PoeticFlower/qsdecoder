@@ -107,7 +107,9 @@ CQuickSync::CQuickSync() :
 
 //    m_Config.bDropDuplicateFrames = true;
     
-    //m_Config.bEnableD3D11 = true;
+#if MFX_D3D11_SUPPORT
+//    m_Config.bEnableD3D11 = true;
+#endif
 
     m_pDecoder = new CQuickSyncDecoder(m_Config, sts);
 
@@ -1106,6 +1108,10 @@ void CQuickSync::SetConfig(CQsConfig* pConfig)
         m_bInitialized = false;
         MSDK_ZERO_VAR(m_DecVideoParams.mfx.FrameInfo);
     }
+
+#if (MFX_D3D11_SUPPORT == 0)
+    m_Config.bEnableD3D11 = false;
+#endif
 
     m_Config = *pConfig;
 }
