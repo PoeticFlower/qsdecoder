@@ -27,7 +27,7 @@
     #pragma message("\nIntel QuickSync Decoder is built with D3D11 support\n")
 #else
     #define MFX_D3D11_SUPPORT 0
-    #pragma message("\nWarning: Intel QuickSync Decoder is built without D3D11 support!")
+    #pragma message("\nNote: Intel QuickSync Decoder is built without D3D11 support!")
     #pragma message("\tMust have Windows SDK 8.0 installed and environment variable INTELMEDIASDK_WINSDK_PATH")
     #pragma message("\tshould point to it.")
     #pragma message("\te.g. \"C:\\Program Files (x86)\\Windows Kits\\8.0\"")

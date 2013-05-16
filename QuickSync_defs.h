@@ -41,7 +41,7 @@
 #   define AVX2_ENABLED
 #endif
 
-#define MAX_SURFACES 256
+#define MSDK_MAX_SURFACES 256
 
 #define MSDK_ARRAY_LEN(A)                        (sizeof(A) / sizeof(A[0]))
 #define MSDK_PRINT_RET_MSG(ERR) \

@@ -188,7 +188,7 @@ protected:
     CHWDevice*               m_HwDevice;
 
     TSurfaceQueue m_OutputSurfaceQueue;
-    volatile LONG m_LockedSurfaces[MAX_SURFACES];
+    volatile LONG m_LockedSurfaces[MSDK_MAX_SURFACES];
 
     // Various locks
     CQsLock m_csOutputQueueLock;

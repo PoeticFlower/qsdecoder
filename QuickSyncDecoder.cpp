@@ -561,6 +561,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
         // D3D11 HW device
         if (m_bUseD3D11Alloc)
         {
+#if MFX_D3D11_SUPPORT
             m_HwDevice = new CD3D11Device();
             if (MFX_ERR_NONE != (sts = m_HwDevice->Init(nAdapterID)))
             {
@@ -572,6 +573,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             p->pDevice = (ID3D11Device*)m_HwDevice->GetHandle(MFX_HANDLE_D3D11_DEVICE);
             pParam.reset(p);
             m_pFrameAllocator = new D3D11FrameAllocator();
+#endif
         }
         // D3D9 HW device
         else
