@@ -243,7 +243,7 @@ mfxStatus CQuickSyncVPP::Reset(const CQsConfig& config, MFXVideoSession* pVideoS
         sts = m_pVPP->Reset(&m_VppVideoParams);
         MSDK_IGNORE_MFX_STS(sts, MFX_WRN_PARTIAL_ACCELERATION);
         MSDK_IGNORE_MFX_STS(sts, MFX_WRN_INCOMPATIBLE_VIDEO_PARAM);
-        if (sts == MFX_ERR_NONE)
+        if (MSDK_SUCCEEDED(sts))
         {
             return MFX_ERR_NONE;
         }
@@ -483,5 +483,5 @@ mfxFrameSurface1* CQuickSyncVPP::FlushFrame()
 
     // Run VPP
     mfxStatus sts = Process(NULL, pOutSurface);
-    return (MFX_ERR_NONE == sts || MFX_ERR_MORE_SURFACE == sts) ? pOutSurface : NULL;
+    return (MSDK_SUCCEEDED(sts) || MFX_ERR_MORE_SURFACE == sts) ? pOutSurface : NULL;
 }

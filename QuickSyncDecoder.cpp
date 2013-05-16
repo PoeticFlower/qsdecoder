@@ -58,7 +58,7 @@ CQuickSyncDecoder::CQuickSyncDecoder(const CQsConfig& cfg, mfxStatus& sts) :
     //impl = MFX_IMPL_SOFTWARE;
 
     sts = InitSession(impl);
-    if (sts == MFX_ERR_NONE && !m_Config.bEnableD3D11 && 0 > GetIntelAdapterIdD3D9(NULL))
+    if (MSDK_SUCCEEDED(sts) && !m_Config.bEnableD3D11 && 0 > GetIntelAdapterIdD3D9(NULL))
     {
         MSDK_TRACE("QsDecoder: can't create HW decoder, the iGPU is not connected to a screen!\n");
         sts = MFX_ERR_UNSUPPORTED;
@@ -81,7 +81,7 @@ mfxStatus CQuickSyncDecoder::InitSession(mfxIMPL impl)
 
     m_mfxVideoSession = new MFXVideoSession;
     mfxStatus sts = m_mfxVideoSession->Init(impl, &m_ApiVersion);
-    if (MFX_ERR_NONE != sts)
+    if (MSDK_FAILED(sts))
     {
         MSDK_TRACE("QsDecoder: failed to initialize MSDK session!\n");
         return sts;
@@ -101,12 +101,15 @@ mfxStatus CQuickSyncDecoder::InitSession(mfxIMPL impl)
     {
         int nAdapterID = GetMSDKAdapterNumber(*m_mfxVideoSession);
 
-        m_HwDevice = new CD3D11Device();
-        if (MFX_ERR_NONE != (sts = m_HwDevice->Init(nAdapterID)))
+        if (NULL == m_HwDevice)
         {
-            MSDK_TRACE("QsDecoder: D3D11 init have failed!\n");
-            MSDK_SAFE_DELETE(m_HwDevice);
-            return sts;
+            m_HwDevice = new CD3D11Device();
+            if (MSDK_FAILED(sts = m_HwDevice->Init(nAdapterID)))
+            {
+                MSDK_TRACE("QsDecoder: D3D11 init have failed!\n");
+                MSDK_SAFE_DELETE(m_HwDevice);
+                return sts;
+            }
         }
 
         mfxHDL h = m_HwDevice->GetHandle(MFX_HANDLE_D3D11_DEVICE);
@@ -254,16 +257,24 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
             MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
             if (m_bUseD3DAlloc)
             {
-                // get relevant handle from HW device and notify the session
-                mfxHandleType hType = (m_bUseD3D11Alloc) ? MFX_HANDLE_D3D11_DEVICE : MFX_HANDLE_D3D9_DEVICE_MANAGER;
-                mfxHDL h = m_HwDevice->GetHandle(hType);
-                m_mfxVideoSession->SetHandle(hType, h);
+                // get D3D9 handle from HW device and notify the session
+                if (!m_bUseD3D11Alloc)
+                {
+                    mfxHDL h = m_HwDevice->GetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER);
+                    sts = m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, h);
+                    if (MSDK_FAILED(sts))
+                    {
+                        MSDK_TRACE("QsDecoder: Session SetHandle failed!\n");
+                        return sts;
+                    }
+                }
 
                 // Note - setting the session allocator can be done only once (per session)!
                 sts = m_mfxVideoSession->SetFrameAllocator(m_pFrameAllocator);
-                if (sts != MFX_ERR_NONE)
+                if (MSDK_FAILED(sts))
                 {
                     MSDK_TRACE("QsDecoder: Session SetFrameAllocator failed!\n");    
+                    return sts;
                 }
             }
 
@@ -273,7 +284,7 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
         {
             sts = m_pmfxDEC->Reset(pVideoParams);
             // Need to reset the frame allocator
-            if (MFX_ERR_NONE != sts)
+            if (MSDK_FAILED(sts))
             {
                 m_pmfxDEC->Close();
                 FreeFrameAllocator();
@@ -376,12 +387,12 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, mfxFrameSurface1*& pOutSu
     } while (MFX_WRN_DEVICE_BUSY == sts || MFX_ERR_MORE_SURFACE == sts);
 
     // Output will be shortly available
-    if (MFX_ERR_NONE == sts) 
+    if (MSDK_SUCCEEDED(sts)) 
     {
         // Wait for the asynch decoding to finish
         sts = m_mfxVideoSession->SyncOperation(syncp, 0xFFFF);
 
-        if (MFX_ERR_NONE == sts)
+        if (MSDK_SUCCEEDED(sts))
         {
             // The surface is locked from being reused in another Decode call
             LockSurface(pOutSurface);
@@ -597,7 +608,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             // Having the D3D9 device manager from the renderer allows working in full screen exclusive mode
             // This parameter can be NULL for other usages
             m_HwDevice = new CD3D9Device(m_pRendererD3dDeviceManager);
-            if (MFX_ERR_NONE != (sts = m_HwDevice->Init(nAdapterID)))
+            if (MSDK_FAILED(sts = m_HwDevice->Init(nAdapterID)))
             {
                 MSDK_TRACE("QsDecoder: D3D9 init have failed!\n");
                 MSDK_SAFE_DELETE(m_HwDevice);
@@ -605,8 +616,8 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             }
 
             // Set the pointer to the HW device (or device manager) to the session
-            mfxHDL h = m_HwDevice->GetHandle(MFX_HANDLE_D3D11_DEVICE);
-            sts = m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D11_DEVICE, h);
+            mfxHDL h = m_HwDevice->GetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER);
+            sts = m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, h);
             MSDK_CHECK_NOT_EQUAL(sts, MFX_ERR_NONE, sts);
 
             D3DAllocatorParams* p = new D3DAllocatorParams;
@@ -624,11 +635,11 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
     }
 
     sts = m_pFrameAllocator->Init(pParam.get());
-    if (sts == MFX_ERR_NONE)
+    if (MSDK_SUCCEEDED(sts))
     {
         // Note - setting the session allocator can be done only once per session!
         sts = m_mfxVideoSession->SetFrameAllocator(m_pFrameAllocator);
-        if (sts != MFX_ERR_NONE)
+        if (MSDK_FAILED(sts))
         {
             MSDK_TRACE("QsDecoder: Session SetFrameAllocator failed!\n");    
         }

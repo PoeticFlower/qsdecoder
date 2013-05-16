@@ -51,6 +51,8 @@
     OutputDebugString(msg); \
     _tperror(msg);\
 }
+#define MSDK_SUCCEEDED(P)                        (MFX_ERR_NONE == (P))
+#define MSDK_FAILED(P)                           (MFX_ERR_NONE != (P))
 #define MSDK_CHECK_ERROR(P, X, ERR)              { if ((X) == (P)) { MSDK_PRINT_RET_MSG(ERR); return ERR; } }
 #define MSDK_CHECK_NOT_EQUAL(P, X, ERR)          { if ((X) != (P)) { MSDK_PRINT_RET_MSG(ERR); return ERR; } }
 #define MSDK_CHECK_RESULT_P_RET(P, X)            { if ((X) != (P)) { return P; } }
@@ -66,8 +68,6 @@
 #define MSDK_ZERO_VAR(VAR)                       { memset(&VAR, 0, sizeof(VAR)); }
 #define MSDK_ALIGN16(SZ)                         ((SZ + 15) & (~15)) // round up to a multiple of 16
 #define MSDK_ALIGN32(SZ)                         ((SZ + 31) & (~31)) // round up to a multiple of 32
-
-#define MSDK_MEMCPY_VAR(dstVarName, src, count)  memcpy_s(&(dstVarName), sizeof(dstVarName), (src), (count))
 
 #ifdef _DEBUG
 #   define ASSERT(_x_)  { if (!(_x_)) DebugAssert(_T(#_x_),_T(__FILE__),__LINE__); }

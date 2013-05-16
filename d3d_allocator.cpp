@@ -243,7 +243,7 @@ mfxStatus D3DFrameAllocator::GetFrameHDL(mfxMemId mid, mfxHDL *handle)
 mfxStatus D3DFrameAllocator::CheckRequestType(mfxFrameAllocRequest *request)
 {    
     mfxStatus sts = BaseFrameAllocator::CheckRequestType(request);
-    if (MFX_ERR_NONE != sts)
+    if (MSDK_FAILED(sts))
         return sts;
 
     if ((request->Type & (MFX_MEMTYPE_VIDEO_MEMORY_DECODER_TARGET | MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET)) != 0)
@@ -267,7 +267,7 @@ mfxStatus D3DFrameAllocator::ReleaseResponse(mfxFrameAllocResponse *response)
             {
                 IDirect3DSurface9* handle = 0;
                 sts = GetFrameHDL(response->mids[i], (mfxHDL *)&handle);
-                if (MFX_ERR_NONE != sts)
+                if (MSDK_FAILED(sts))
                     return sts;
                 handle->Release();
             }
@@ -378,7 +378,7 @@ mfxStatus D3DFrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrameAl
     for (mfxU32 i = 0; i < request->NumFrameSuggested; i++)
     {
         mfxFrameData pData;
-        if (MFX_ERR_NONE == LockFrame(mids.get()[i], &pData))
+        if (MSDK_SUCCEEDED(LockFrame(mids.get()[i], &pData)))
         {
             if (format == D3DFMT_NV12 ||
                 format == D3DFMT_YV12)
