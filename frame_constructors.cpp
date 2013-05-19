@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -548,25 +548,28 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
 
 mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS)
 {
-    mfxU32 nDataSize = 0; 
+    // AnnexB style stream - just copy the buffer as is.
+    if (0 == m_NalSize)
+    {
+        return CFrameConstructor::ConstructFrame(pSample, pBS);
+    }
+
     mfxU8* pDataBuffer = NULL;    
-    CH264Nalu itStartCode;
-    size_t nNalDataLen; 
-    const mfxU8* pNalDataBuff; 
-    m_TempBuffer.clear();
     MSDK_CHECK_POINTER(pSample, MFX_ERR_NULL_PTR); 
     MSDK_CHECK_POINTER(pBS, MFX_ERR_NULL_PTR); 
 
     UpdateTimeStamp(pSample, pBS);
-
-    nDataSize = pSample->GetActualDataLength();
+    
+    mfxU32 nDataSize = pSample->GetActualDataLength();
     MSDK_CHECK_ERROR(nDataSize, 0, MFX_ERR_MORE_DATA); 
-    m_TempBuffer.reserve(nDataSize * 3 / 2);
 
     pSample->GetPointer(&pDataBuffer);
-    MSDK_CHECK_POINTER(pDataBuffer,  MFX_ERR_NULL_PTR);
-
-    itStartCode.SetBuffer(pDataBuffer, nDataSize, m_NalSize); // Nal size = 4
+    MSDK_CHECK_POINTER(pDataBuffer, MFX_ERR_NULL_PTR);
+    m_TempBuffer.clear();
+    m_TempBuffer.reserve(nDataSize);
+    
+    CH264Nalu itStartCode;
+    itStartCode.SetBuffer(pDataBuffer, nDataSize, m_NalSize); // Nal size = 4 (usually); declared in extra data (ConstructHeaders)
 
     // Iterate over the NALUs and convert them to have start codes.
     while (itStartCode.ReadNext())
@@ -580,8 +583,8 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
         if (!IS_VALID_NALU(naluType))
             continue;
 
-        nNalDataLen =  itStartCode.GetDataLength(); 
-        pNalDataBuff = itStartCode.GetDataBuffer();
+        size_t nNalDataLen =  itStartCode.GetDataLength(); 
+        const BYTE* pNalDataBuff = itStartCode.GetDataBuffer();
 
         ASSERT(nNalDataLen > 0); // Shouldn't fail!
         if (nNalDataLen > 0)
