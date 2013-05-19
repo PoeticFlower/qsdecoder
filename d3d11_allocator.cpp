@@ -160,7 +160,7 @@ mfxStatus D3D11FrameAllocator::LockFrame(mfxMemId mid, mfxFrameData *ptr)
                     hRes = m_pDeviceContext->Map(sr.GetStaging(), 0, mapType, mapFlags, &lockedRect);
                     if (S_OK != hRes && DXGI_ERROR_WAS_STILL_DRAWING != hRes)
                     {
-                        printf("ERROR: m_pDeviceContext->Map = 0x%X\n", hRes);
+                        MSDK_TRACE("ERROR: m_pDeviceContext->Map = 0x%lX\n", hRes);
                     }
                 }
                 while (DXGI_ERROR_WAS_STILL_DRAWING == hRes);
@@ -388,7 +388,7 @@ mfxStatus D3D11FrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrame
 
             if (FAILED(hRes))
             {
-                printf("CreateTexture2D(%d) failed, hr = \n", i, hRes);
+                MSDK_TRACE("CreateTexture2D(%d) failed, hr = 0x%lX\n", (int)i, hRes);
                 return MFX_ERR_MEMORY_ALLOC;
             }
             newTexture.textures.push_back(pTexture2D);
@@ -406,7 +406,7 @@ mfxStatus D3D11FrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrame
 
             if (FAILED(hRes))
             {        
-                printf("Create staging texture(%d) failed hr = \n", i, hRes);
+                MSDK_TRACE("Create staging texture(%d) failed hr = 0x%lX\n", (int)i, hRes);
                 return MFX_ERR_MEMORY_ALLOC;
             }
             newTexture.stagingTexture.push_back(pTexture2D);

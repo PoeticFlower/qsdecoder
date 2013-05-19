@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -36,7 +36,7 @@
 #define MIN_REQUIRED_API_VER_MAJOR 1
 
 // VS2012 provides AVX and AVX2 intrinsics
-#if _MSC_VER >= 1700 
+#if 0// _MSC_VER >= 1700  // AVX2 copy is not faster than SSE2, it's slower. Copy function is left for reference only.
 #   define AVX_ENABLED
 #   define AVX2_ENABLED
 #endif

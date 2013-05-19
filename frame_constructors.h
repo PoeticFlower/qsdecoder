@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -77,7 +77,7 @@ class CAVCFrameConstructor : public CFrameConstructor
 public:
     CAVCFrameConstructor();
     ~CAVCFrameConstructor();
-    virtual mfxStatus ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS);
+    mfxStatus ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS);
     mfxStatus ConstructHeaders(VIDEOINFOHEADER2* vih,
         const GUID& guidFormat,
         size_t nMtSize,
@@ -87,5 +87,5 @@ private:
     mfxU32             m_NalSize; 
     mfxU32             m_HeaderNalSize; 
     mfxU8              m_H264StartCode[4];
-    std::vector<mfxU8> m_TempBuffer;
+    std::vector<mfxU8> m_TempBuffer;         // used for building the output stream
 };

@@ -98,8 +98,13 @@ protected:
     HANDLE m_handle;
 };
 
-D3DFrameAllocator::D3DFrameAllocator()
-: m_decoderService(0), m_processorService(0), m_hDecoder(0), m_hProcessor(0), m_manager(0), m_surfaceUsage(0)
+D3DFrameAllocator::D3DFrameAllocator() :
+    m_manager(0),
+    m_decoderService(0),
+    m_processorService(0),
+    m_hDecoder(0),
+    m_hProcessor(0),
+    m_surfaceUsage(0)
 {    
 }
 

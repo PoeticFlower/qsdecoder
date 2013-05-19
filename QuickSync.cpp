@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -65,7 +65,7 @@ CQuickSync::CQuickSync() :
     )
 {
     MSDK_TRACE("QsDecoder: Constructor\n");
-    strcpy(m_CodecName, "Intel\xae QuickSync Decoder");
+    strcpy_s(m_CodecName, "Intel\xae QuickSync Decoder");
 
     mfxStatus sts = MFX_ERR_NONE;
 
@@ -194,7 +194,10 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
             return VFW_E_INVALIDMEDIATYPE;
 
         videoParams.mfx.CodecId = MFX_CODEC_AVC;
-        // Always use CAVCFrameConstructor, allows handling/fixing stream error
+        // Note: CAVCFrameConstructor can handle both H264 stream types but it can't handle fragment streams (e.g. live TV)
+//        pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
+//            new CAVCFrameConstructor :
+//            new CFrameConstructor;
         pFrameConstructor = new CAVCFrameConstructor;
     }
     else
@@ -1243,6 +1246,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                     // Reset failed...
                     if (sts < 0)
                     {
+                        MSDK_TRACE("QsDecoder: Error VPP reset failed!\n")
                         // Change config to disable VPP from being created for this video 
                         if (sts != MFX_ERR_NOT_INITIALIZED)
                         {
@@ -1270,26 +1274,24 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
                 // Run VPP
                 sts = m_pVPP->Process(pInSurface, pOutSurface);
 
-                // Check time stamp, interpolate newly created frames
-                if (sts >= 0 || MFX_ERR_MORE_SURFACE == sts)
-                {
-                    if (m_Config.bVppEnableDITimeStampsInterpolation)
-                    {
-                        REFERENCE_TIME rtNewStart = (MFX_ERR_MORE_SURFACE == sts) ? rtPrevStart : m_TimeManager.GetLastTimeStamp();                    
-                        if (pOutSurface->Data.TimeStamp == MFX_TIME_STAMP_INVALID && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
-                        {
-                            rtNewStart += (REFERENCE_TIME)(0.5 + 1e7 * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);
-                            pOutSurface->Data.TimeStamp = m_TimeManager.ConvertReferenceTime2MFXTime(rtNewStart);
-                        }
-                    }
-                }
                 // VPP failed
-                else
+                if (MSDK_FAILED(sts) && sts != MFX_ERR_MORE_SURFACE)
                 {
                     MSDK_TRACE("QsDecoder: VPP->Process failed with error %i\n", (int)sts);
                     pOutSurface = pInSurface;
                     sts = MFX_ERR_NONE;
                 }
+            }
+        }
+
+        // Check time stamp, interpolate newly created frames
+        if (MFX_ERR_MORE_SURFACE == sts && m_Config.bVppEnableDITimeStampsInterpolation)
+        {
+            if (pOutSurface->Data.TimeStamp == MFX_TIME_STAMP_INVALID && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
+            {
+                REFERENCE_TIME rtNewStart = (MFX_ERR_MORE_SURFACE == sts) ? rtPrevStart : m_TimeManager.GetLastTimeStamp();                    
+                rtNewStart += (REFERENCE_TIME)(0.5 + 1e7 * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);
+                pOutSurface->Data.TimeStamp = m_TimeManager.ConvertReferenceTime2MFXTime(rtNewStart);
             }
         }
 
@@ -1402,7 +1404,8 @@ void CQuickSync::UpdateAspectRatio(mfxFrameSurface1* pSurface, QsFrameData& fram
 void CQuickSync::FlushVPP()
 {
     MSDK_CHECK_POINTER_NO_RET(m_pVPP);
-
+    REFERENCE_TIME rtPrevStart = m_TimeManager.GetLastTimeStamp();
+    int count = 0;
     while (!m_bNeedToFlush)
     {
         mfxFrameSurface1* pOutSurface = m_pVPP->FlushFrame();
@@ -1411,6 +1414,17 @@ void CQuickSync::FlushVPP()
         if (NULL == pOutSurface)
         {
             break;
+        }
+
+        // Check time stamp, interpolate newly created frames
+        if (m_Config.bVppEnableDITimeStampsInterpolation)
+        {
+            if (pOutSurface->Data.TimeStamp == MFX_TIME_STAMP_INVALID && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
+            {
+                REFERENCE_TIME rtNewStart = rtPrevStart;
+                rtNewStart += (REFERENCE_TIME)(0.5 + (double)(++count) * 1e7 * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);
+                pOutSurface->Data.TimeStamp = m_TimeManager.ConvertReferenceTime2MFXTime(rtNewStart);
+            }
         }
 
         // If input frame was meant to be discarded then we still want to VPP to work -

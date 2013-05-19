@@ -98,10 +98,10 @@ protected:
         // compare responses by actual frame size, alignment (w and h) is up to application
         UniqueResponse(const mfxFrameAllocResponse & response, mfxU16 cropw, mfxU16 croph, mfxU16 type)
             : mfxFrameAllocResponse(response)
-            , m_type(type)
-            , m_refCount(1)
             , m_cropw(cropw)
             , m_croph(croph)
+            , m_refCount(1)
+            , m_type(type)
         { 
         } 
         //compare by resolution

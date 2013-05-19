@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, INTEL CORPORATION
+ * Copyright (c) 2013, INTEL CORPORATION
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification,
@@ -595,6 +595,7 @@ mfxStatus CQuickSyncDecoder::CreateAllocator()
             // HW device must be initialized early - within session init.
             // If a call to DecodeHeader was called before session->SetHandle, SetHandle would fail.
             ASSERT(m_HwDevice);
+            MSDK_CHECK_POINTER(m_HwDevice, MFX_ERR_NULL_PTR);
 
             D3D11AllocatorParams* p = new D3D11AllocatorParams;
             p->pDevice = (ID3D11Device*)m_HwDevice->GetHandle(MFX_HANDLE_D3D11_DEVICE);
