@@ -13,14 +13,6 @@
 #include <process.h>
 
 // Platform SDK
-#include <d3d9.h>
-#include <d3d11.h>
-#include <dshow.h>
-#include <dvdmedia.h>
-#include <initguid.h>
-#include <atlbase.h>
-#include <dxva2api.h>
-#include <dxgi1_2.h>
 #include <sdkddkver.h>
 #if (NTDDI_VERSION >= NTDDI_VERSION_FROM_WIN32_WINNT2(0x0602)) // >= _WIN32_WINNT_WIN8
     #define MFX_D3D11_SUPPORT 1 // Enable D3D11 support if SDK allows
@@ -33,6 +25,16 @@
     #pragma message("\te.g. \"C:\\Program Files (x86)\\Windows Kits\\8.0\"")
 #endif
 
+#include <d3d9.h>
+#include <d3d11.h>
+#include <dshow.h>
+#include <dvdmedia.h>
+#include <initguid.h>
+#include <atlbase.h>
+#include <dxva2api.h>
+#if MFX_D3D11_SUPPORT
+    #include <dxgi1_2.h>
+#endif
 // Intel Media SDK
 #include <mfxvideo++.h>
 
