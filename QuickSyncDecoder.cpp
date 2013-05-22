@@ -245,53 +245,15 @@ mfxStatus CQuickSyncDecoder::InternalReset(mfxVideoParam* pVideoParams, mfxU32 n
     // Reset decoder
     if (bInited)
     {
-        // Kill the session for VC1 only (workaround)
-        // Doing this for MPEG2 will cause issues like aspect ratio change will not be detected.
-        if (pVideoParams->mfx.CodecId == MFX_CODEC_VC1 && pVideoParams->mfx.CodecProfile == MFX_PROFILE_VC1_ADVANCED)
+        sts = m_pmfxDEC->Reset(pVideoParams);
+        // Need to reset the frame allocator
+        if (MSDK_FAILED(sts))
         {
-            MFXVideoSession* saveSession = m_mfxVideoSession; // Kill the old session later so MSDK DLL will not unload
-            m_mfxVideoSession = NULL;
-            CloseSession();
-            sts = InitSession(m_mfxImpl);
-            delete saveSession;
-            MSDK_CHECK_RESULT_P_RET(sts, MFX_ERR_NONE);
-            if (m_bUseD3DAlloc)
-            {
-                // get D3D9 handle from HW device and notify the session
-                if (!m_bUseD3D11Alloc)
-                {
-                    mfxHDL h = m_HwDevice->GetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER);
-                    sts = m_mfxVideoSession->SetHandle(MFX_HANDLE_D3D9_DEVICE_MANAGER, h);
-                    if (MSDK_FAILED(sts))
-                    {
-                        MSDK_TRACE("QsDecoder: Session SetHandle failed!\n");
-                        return sts;
-                    }
-                }
-
-                // Note - setting the session allocator can be done only once (per session)!
-                sts = m_mfxVideoSession->SetFrameAllocator(m_pFrameAllocator);
-                if (MSDK_FAILED(sts))
-                {
-                    MSDK_TRACE("QsDecoder: Session SetFrameAllocator failed!\n");    
-                    return sts;
-                }
-            }
-
+            m_pmfxDEC->Close();
+            FreeFrameAllocator();
             bInited = false;
         }
-        else
-        {
-            sts = m_pmfxDEC->Reset(pVideoParams);
-            // Need to reset the frame allocator
-            if (MSDK_FAILED(sts))
-            {
-                m_pmfxDEC->Close();
-                FreeFrameAllocator();
-                bInited = false;
-            }
-        }
-
+        
         if (m_pFrameSurfaces != NULL)
         {
             // Another VC1 decoder + VPP bug workaround
@@ -400,124 +362,6 @@ mfxStatus CQuickSyncDecoder::Decode(mfxBitstream* pBS, mfxFrameSurface1*& pOutSu
     }
 
     return sts;
-}
-
-mfxStatus CQuickSyncDecoder::InitD3DFromRenderer()
-{
-/*
-    MSDK_VTRACE("QsDecoder: InitD3DFromRenderer\n");
-
-    // Get DirectX Object
-    HANDLE hDevice;
-    IDirect3DDevice9* pDevice = NULL;
-    CComPtr<IDirect3D9> pD3D;
-    D3DDEVICE_CREATION_PARAMETERS devParames;
-    D3DPRESENT_PARAMETERS d3dParams = {1, 1, D3DFMT_X8R8G8B8, 1, D3DMULTISAMPLE_NONE, 0, D3DSWAPEFFECT_DISCARD, NULL, TRUE, FALSE, D3DFMT_UNKNOWN, 0, 0, D3DPRESENT_INTERVAL_IMMEDIATE};
-    mfxStatus sts = MFX_ERR_NONE;
-
-    HRESULT hr = m_pRendererD3dDeviceManager->OpenDeviceHandle(&hDevice);
-    if (FAILED(hr))
-    {
-        MSDK_TRACE("QsDecoder: failed to open device handle!\n");
-        goto done;
-    }
-    hr = m_pRendererD3dDeviceManager->LockDevice(hDevice, &pDevice, TRUE);
-    if (FAILED(hr) || NULL == pDevice)
-    {
-        MSDK_TRACE("QsDecoder: failed to lock device!\n");
-        switch (hr)
-        {
-        case DXVA2_E_NEW_VIDEO_DEVICE:
-            MSDK_TRACE("QsDecoder: The device handle is invalid.!\n");
-            break;
-        case DXVA2_E_NOT_INITIALIZED:
-            MSDK_TRACE("QsDecoder: The Direct3D device manager was not initialized.!\n");
-            break;
-        case E_HANDLE:
-            MSDK_TRACE("QsDecoder: The specified handle is not a Direct3D device handle.!\n");
-            break;
-        default:
-            MSDK_TRACE("QsDecoder: Unknown error %x\n", hr);
-        }
-        goto done;
-    }
-
-    hr = pDevice->GetDirect3D(&pD3D);
-    if (FAILED(hr))
-    {
-        MSDK_TRACE("QsDecoder: failed to get D3D9 object!\n");
-        goto done;
-    }
-
-    hr = pDevice->GetCreationParameters(&devParames);
-    if (FAILED(hr))
-    {
-        MSDK_TRACE("QsDecoder: failed to get device creation params!\n");
-        goto done;
-    }
-
-    // Find Intel adapter number - not always the default adapter
-    int adapterId = GetIntelAdapterIdD3D9(pD3D);
-    if (adapterId < 0)
-    {
-        hr = E_FAIL;
-        MSDK_TRACE("QsDecoder: didn't find an Intel GPU.\n");
-        goto done;
-    }
-
-    // Create d3d device
-    m_pD3dDevice = 0;
-    d3dParams.hDeviceWindow = devParames.hFocusWindow;
-    hr = pD3D->CreateDevice(
-        adapterId,
-        D3DDEVTYPE_HAL,
-        devParames.hFocusWindow,
-        D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED | D3DCREATE_FPU_PRESERVE,
-        &d3dParams,
-        &m_pD3dDevice);
-
-    if (FAILED(hr) || !m_pD3dDevice)
-    {
-        hr = E_FAIL;
-        MSDK_TRACE("QsDecoder: InitD3d CreateDevice failed!\n");
-        goto done;
-    }
-
-    // Create device manager            
-    hr = DXVA2CreateDirect3DDeviceManager9(&m_ResetToken, &m_pD3dDeviceManager);
-    if (FAILED(hr) || !m_pD3dDeviceManager)
-    {
-        hr = E_FAIL;
-        MSDK_TRACE("QsDecoder: InitD3d DXVA2CreateDirect3DDeviceManager9 failed!\n");
-        goto done;
-    }
-
-    // Reset the d3d device
-    hr = m_pD3dDeviceManager->ResetDevice(m_pD3dDevice, m_ResetToken);
-    if (FAILED(hr))
-    {
-        hr = E_FAIL;
-        MSDK_TRACE("QsDecoder: InitD3d ResetDevice failed!\n");
-        goto done;
-    }
-
-    // Cleanup
-done:
-    if (FAILED(hr))
-    {
-        sts = MFX_ERR_DEVICE_FAILED;
-    }
-
-    MSDK_SAFE_RELEASE(pDevice);
-    if (hDevice != NULL)
-    {
-        m_pRendererD3dDeviceManager->UnlockDevice(hDevice, FALSE);
-        m_pRendererD3dDeviceManager->CloseDeviceHandle(hDevice);
-    }
-
-    return sts;
-*/
-return MFX_ERR_NONE;
 }
 
 void CQuickSyncDecoder::CloseD3D()

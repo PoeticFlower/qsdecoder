@@ -30,21 +30,6 @@
 
 #include "hw_device.h"
 
-#pragma warning(disable : 4201)
-#include <d3d9.h>
-#include <dxva2api.h>
-#include <dxva.h>
-#include <windows.h>
-
-enum {
-    MFX_HANDLE_GFXS3DCONTROL = 0x100 /* A handle to the IGFXS3DControl instance */
-}; //mfxHandleType
-
-#define OVERLAY_BACKBUFFER_FORMAT D3DFMT_X8R8G8B8
-#define VIDEO_MAIN_FORMAT D3DFMT_YUY2
-
-class IGFXS3DControl;
-
 /** Direct3D 9 device implementation.
 @note Can be initilized for only 1 or two 2 views. Handle to 
 MFX_HANDLE_GFXS3DCONTROL must be set prior if initializing for 2 views.
@@ -74,4 +59,3 @@ private:
     D3DPRESENT_PARAMETERS       m_D3DPP;
     UINT                        m_ResetToken;
 };
-

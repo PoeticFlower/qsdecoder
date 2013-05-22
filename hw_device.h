@@ -28,8 +28,6 @@
 
 #pragma once
 
-#include "mfxvideo++.h"
-
 /// Base class for hw device
 class CHWDevice
 {

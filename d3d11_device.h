@@ -34,23 +34,21 @@
 class CD3D11Device: public CHWDevice
 {
 public:
+    // ctor/dtor
     CD3D11Device();
     virtual ~CD3D11Device();
+    //
     virtual mfxStatus Init(int nAdapterNum);
     virtual mfxStatus Reset();
     virtual mfxHDL    GetHandle(mfxHandleType type);
     virtual void      Close();
+
 protected:
-    virtual mfxStatus FillSCD(mfxHDL hWindow, DXGI_SWAP_CHAIN_DESC& scd);
-
-    CComPtr<ID3D11Device>                   m_pD3D11Device;
-    CComPtr<ID3D11DeviceContext>            m_pD3D11Ctx;
-    CComQIPtr<ID3D11VideoDevice>            m_pDX11VideoDevice;
-    CComQIPtr<ID3D11VideoContext>           m_pVideoContext;
-
-    CComQIPtr<IDXGIDevice1>                 m_pDXGIDev;
-    CComQIPtr<IDXGIAdapter>                 m_pAdapter;
-
-    CComPtr<IDXGIFactory2>                  m_pDXGIFactory;
+    CComPtr<ID3D11Device>         m_pD3D11Device;
+    CComPtr<ID3D11DeviceContext>  m_pD3D11Ctx;
+    CComQIPtr<ID3D11VideoDevice>  m_pDX11VideoDevice;
+    CComQIPtr<ID3D11VideoContext> m_pVideoContext;
+    CComQIPtr<IDXGIAdapter>       m_pAdapter;
+    CComPtr<IDXGIFactory2>        m_pDXGIFactory;
 };
 #endif //#if MFX_D3D11_SUPPORT
