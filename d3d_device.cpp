@@ -29,12 +29,6 @@
 #include "stdafx.h"
 #include "QuickSync_defs.h"
 #include "QuickSyncUtils.h"
-
-//prefast singnature used in combaseapi.h
-#ifndef _PREFAST_
-    #pragma warning(disable:4068)
-#endif
-
 #include "d3d_device.h"
 
 CD3D9Device::CD3D9Device(IDirect3DDeviceManager9* pDeviceManager9) :
@@ -155,7 +149,6 @@ mfxStatus CD3D9Device::InitFromScratch(int nAdapterNum)
         &m_D3DPP,
         &m_pD3DD9);
 
-
     if (FAILED(hr))
         return MFX_ERR_NULL_PTR;
 
@@ -194,6 +187,7 @@ mfxStatus CD3D9Device::InitFromRenderer(int nAdapterNum)
         MSDK_TRACE("QsDecoder: failed to open device handle!\n");
         goto done;
     }
+
     hr = extD3DManager->LockDevice(hDevice, &pDevice, TRUE);
     if (FAILED(hr) || NULL == pDevice)
     {
@@ -210,7 +204,7 @@ mfxStatus CD3D9Device::InitFromRenderer(int nAdapterNum)
             MSDK_TRACE("QsDecoder: The specified handle is not a Direct3D device handle.!\n");
             break;
         default:
-            MSDK_TRACE("QsDecoder: Unknown error %x\n", hr);
+            MSDK_TRACE("QsDecoder: Unknown error while locking D3D device %x\n", hr);
         }
         goto done;
     }

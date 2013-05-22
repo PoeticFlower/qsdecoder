@@ -160,7 +160,6 @@ protected:
     mfxStatus         InternalReset(mfxVideoParam* pVideoParams, mfxU32 nPitch, bool bInited);
     mfxStatus         InitSession(mfxIMPL impl);
     void              CloseSession();
-    mfxStatus         InitD3DFromRenderer();
     void              CloseD3D();
 
 // data members

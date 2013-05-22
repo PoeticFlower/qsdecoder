@@ -315,6 +315,7 @@ mfxStatus CQuickSyncVPP::Process(mfxFrameSurface1* pInSurface, mfxFrameSurface1*
         }
     }
 
+    // Call VPP
     do
     {
         sts = m_pVPP->RunFrameVPPAsync(pInSurface, pOutSurface, NULL, &syncp);

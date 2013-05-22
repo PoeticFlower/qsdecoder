@@ -107,7 +107,8 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <PreprocessorDefinitions>WIN32;DEBUG;_DEBUG;_WINDOWS;_USRDLL;QUICKSYNC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <DisableSpecificWarnings>4996;4995</DisableSpecificWarnings>
+      <DisableSpecificWarnings>
+      </DisableSpecificWarnings>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MinimalRebuild>false</MinimalRebuild>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
@@ -133,7 +134,8 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;DEBUG;_DEBUG;_WINDOWS;_USRDLL;QUICKSYNC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <DisableSpecificWarnings>4996;4995</DisableSpecificWarnings>
+      <DisableSpecificWarnings>
+      </DisableSpecificWarnings>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MinimalRebuild>false</MinimalRebuild>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -159,7 +161,8 @@
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;QUICKSYNC_EXPORTS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <DisableSpecificWarnings>4996;4995</DisableSpecificWarnings>
+      <DisableSpecificWarnings>
+      </DisableSpecificWarnings>
       <WarningLevel>Level4</WarningLevel>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -193,7 +196,8 @@
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;QUICKSYNC_EXPORTS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <DisableSpecificWarnings>4996;4995</DisableSpecificWarnings>
+      <DisableSpecificWarnings>
+      </DisableSpecificWarnings>
       <WarningLevel>Level4</WarningLevel>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>

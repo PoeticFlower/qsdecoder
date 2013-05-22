@@ -27,10 +27,9 @@
  */
 
 #include "stdafx.h"
+#if MFX_D3D11_SUPPORT
 #include "QuickSync_defs.h"
 #include "d3d11_device.h"
-
-#if MFX_D3D11_SUPPORT
 
 CD3D11Device::CD3D11Device()
 {
@@ -41,30 +40,18 @@ CD3D11Device::~CD3D11Device()
     Close();
 }
 
-mfxStatus CD3D11Device::FillSCD(mfxHDL hWindow, DXGI_SWAP_CHAIN_DESC& scd)
-{
-    scd.Windowed = TRUE;
-    scd.OutputWindow = (HWND)hWindow;
-    scd.SampleDesc.Count = 1;
-    scd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    scd.BufferCount = 1;
-
-    return MFX_ERR_NONE;
-}
-
 mfxStatus CD3D11Device::Init(int nAdapterNum)
 {
-    mfxStatus sts = MFX_ERR_NONE;
-    HRESULT hres = S_OK;
-
-    static D3D_FEATURE_LEVEL FeatureLevels[] = { 
+    static const D3D_FEATURE_LEVEL featureLevels[] = {
         D3D_FEATURE_LEVEL_11_1, 
         D3D_FEATURE_LEVEL_11_0, 
         D3D_FEATURE_LEVEL_10_1, 
         D3D_FEATURE_LEVEL_10_0 
     };
     D3D_FEATURE_LEVEL pFeatureLevelsOut;
+
+    mfxStatus sts = MFX_ERR_NONE;
+    HRESULT hres = S_OK;
 
     hres = CreateDXGIFactory(__uuidof(IDXGIFactory2), (void**)(&m_pDXGIFactory) );
     if (FAILED(hres))
@@ -74,25 +61,23 @@ mfxStatus CD3D11Device::Init(int nAdapterNum)
     if (FAILED(hres))
         return MFX_ERR_DEVICE_FAILED;
 
-    hres =  D3D11CreateDevice(m_pAdapter ,
-                            D3D_DRIVER_TYPE_UNKNOWN,
-                            NULL,
-                            0,
-                            FeatureLevels,
-                            MSDK_ARRAY_LEN(FeatureLevels),
-                            D3D11_SDK_VERSION,
-                            &m_pD3D11Device,
-                            &pFeatureLevelsOut,
-                            &m_pD3D11Ctx);
+    hres =  D3D11CreateDevice(m_pAdapter,
+        D3D_DRIVER_TYPE_UNKNOWN,
+        NULL,
+        0,
+        featureLevels,
+        MSDK_ARRAY_LEN(featureLevels),
+        D3D11_SDK_VERSION,
+        &m_pD3D11Device,
+        &pFeatureLevelsOut,
+        &m_pD3D11Ctx);
 
     if (FAILED(hres))    
         return MFX_ERR_DEVICE_FAILED;
 
-    m_pDXGIDev = m_pD3D11Device;
     m_pDX11VideoDevice = m_pD3D11Device;
     m_pVideoContext = m_pD3D11Ctx;
     
-    MSDK_CHECK_POINTER(m_pDXGIDev.p, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(m_pDX11VideoDevice.p, MFX_ERR_NULL_PTR);
     MSDK_CHECK_POINTER(m_pVideoContext.p, MFX_ERR_NULL_PTR);
 

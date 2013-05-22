@@ -27,10 +27,10 @@
  */
 
 #include "stdafx.h"
-#include "QuickSync_defs.h"
 
 #if MFX_D3D11_SUPPORT
-
+#include "QuickSync_defs.h"
+#include "QuickSyncUtils.h"
 #include "d3d11_allocator.h"
 
 #define D3DFMT_NV12 (DXGI_FORMAT)MAKEFOURCC('N','V','1','2')
@@ -120,7 +120,6 @@ mfxStatus D3D11FrameAllocator::LockFrame(mfxMemId mid, mfxFrameData *ptr)
     D3D11_TEXTURE2D_DESC desc = {0};
     D3D11_MAPPED_SUBRESOURCE lockedRect = {0};
 
-
     //check that texture exists
     TextureSubResource sr = GetResourceFromMid(mid);
     if (!sr.GetTexture())
@@ -129,131 +128,57 @@ mfxStatus D3D11FrameAllocator::LockFrame(mfxMemId mid, mfxFrameData *ptr)
     D3D11_MAP mapType = D3D11_MAP_READ;
     UINT mapFlags = D3D11_MAP_FLAG_DO_NOT_WAIT;
     {
-        if (NULL == sr.GetStaging())
+        ASSERT(NULL != sr.GetStaging());
+        sr.GetTexture()->GetDesc(&desc);
+
+        if (DXGI_FORMAT_NV12 != desc.Format)
         {
-            hRes = m_pDeviceContext->Map(sr.GetTexture(), sr.GetSubResource(), D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &lockedRect);
-            desc.Format = DXGI_FORMAT_P8;
+            return MFX_ERR_LOCK_MEMORY;
         }
-        else
+
+        m_pDeviceContext->CopySubresourceRegion(sr.GetStaging(), 0, 0, 0, 0, sr.GetTexture(), sr.GetSubResource(), NULL); 
+
+        do
         {
-            sr.GetTexture()->GetDesc(&desc);
-
-            if (DXGI_FORMAT_NV12 != desc.Format &&
-                DXGI_FORMAT_420_OPAQUE != desc.Format &&
-                DXGI_FORMAT_YUY2 != desc.Format &&
-                DXGI_FORMAT_P8 != desc.Format &&
-                DXGI_FORMAT_B8G8R8A8_UNORM != desc.Format)
+            hRes = m_pDeviceContext->Map(sr.GetStaging(), 0, mapType, mapFlags, &lockedRect);
+            if (S_OK != hRes && DXGI_ERROR_WAS_STILL_DRAWING != hRes)
             {
-                return MFX_ERR_LOCK_MEMORY;
+                MSDK_TRACE("ERROR: m_pDeviceContext->Map = 0x%lX\n", hRes);
             }
-
-            //coping data only in case user wants to read from stored surface
-            {
-                
-                if (MFXReadWriteMid(mid, MFXReadWriteMid::reuse).isRead())
-                {
-                    m_pDeviceContext->CopySubresourceRegion(sr.GetStaging(), 0, 0, 0, 0, sr.GetTexture(), sr.GetSubResource(), NULL); 
-                }
-
-                do
-                {
-                    hRes = m_pDeviceContext->Map(sr.GetStaging(), 0, mapType, mapFlags, &lockedRect);
-                    if (S_OK != hRes && DXGI_ERROR_WAS_STILL_DRAWING != hRes)
-                    {
-                        MSDK_TRACE("ERROR: m_pDeviceContext->Map = 0x%lX\n", hRes);
-                    }
-                }
-                while (DXGI_ERROR_WAS_STILL_DRAWING == hRes);
-            }
-
         }
+        while (DXGI_ERROR_WAS_STILL_DRAWING == hRes);
     }
 
     if (FAILED(hRes))
         return MFX_ERR_LOCK_MEMORY;
 
-    switch (desc.Format)
-    {
-        case DXGI_FORMAT_NV12:
-            ptr->Pitch = (mfxU16)lockedRect.RowPitch;
-            ptr->Y = (mfxU8 *)lockedRect.pData;
-            ptr->U = (mfxU8 *)lockedRect.pData + desc.Height * lockedRect.RowPitch;
-            ptr->V = ptr->U + 1;
-
-            break;
-
-        case DXGI_FORMAT_420_OPAQUE: // can be unsupported by standard ms guid
-            ptr->Pitch = (mfxU16)lockedRect.RowPitch;
-            ptr->Y = (mfxU8 *)lockedRect.pData;
-            ptr->V = ptr->Y + desc.Height * lockedRect.RowPitch;
-            ptr->U = ptr->V + (desc.Height * lockedRect.RowPitch) / 4;
-
-            break;
-
-        case DXGI_FORMAT_YUY2:
-            ptr->Pitch = (mfxU16)lockedRect.RowPitch;
-            ptr->Y = (mfxU8 *)lockedRect.pData;
-            ptr->U = ptr->Y + 1;
-            ptr->V = ptr->Y + 3;
-
-            break;
-
-        case DXGI_FORMAT_P8 :
-            ptr->Pitch = (mfxU16)lockedRect.RowPitch;
-            ptr->Y = (mfxU8 *)lockedRect.pData;
-            ptr->U = 0;
-            ptr->V = 0;
-
-            break;
-
-        case DXGI_FORMAT_B8G8R8A8_UNORM :
-            ptr->Pitch = (mfxU16)lockedRect.RowPitch;
-            ptr->B = (mfxU8 *)lockedRect.pData;
-            ptr->G = ptr->B + 1;
-            ptr->R = ptr->B + 2;
-            ptr->A = ptr->B + 3;
-
-            break;
-
-        default:
-
-            return MFX_ERR_LOCK_MEMORY;
-    }
+    MSDK_CHECK_NOT_EQUAL(desc.Format, DXGI_FORMAT_NV12, MFX_ERR_LOCK_MEMORY);
+    ptr->Pitch = (mfxU16)lockedRect.RowPitch;
+    ptr->Y = (mfxU8 *)lockedRect.pData;
+    ptr->U = (mfxU8 *)lockedRect.pData + desc.Height * lockedRect.RowPitch;
+    ptr->V = ptr->U + 1;
 
     return MFX_ERR_NONE;
 }
 
-mfxStatus D3D11FrameAllocator::UnlockFrame(mfxMemId mid, mfxFrameData *ptr)
+mfxStatus D3D11FrameAllocator::UnlockFrame(mfxMemId mid, mfxFrameData* ptr)
 {
     //check that texture exists
     TextureSubResource sr = GetResourceFromMid(mid);
     if (!sr.GetTexture())
         return MFX_ERR_LOCK_MEMORY;
 
-    if (NULL == sr.GetStaging())
-    {
-        m_pDeviceContext->Unmap(sr.GetTexture(), sr.GetSubResource());
-    }
-    else
-    {        
-        m_pDeviceContext->Unmap(sr.GetStaging(), 0);
-        //only if user wrote something to texture
-        if (MFXReadWriteMid(mid, MFXReadWriteMid::reuse).isWrite())
-        {
-            m_pDeviceContext->CopySubresourceRegion(sr.GetTexture(), sr.GetSubResource(), 0, 0, 0, sr.GetStaging(), 0, NULL);         
-        }
-    }
+    m_pDeviceContext->Unmap(sr.GetStaging(), 0);
 
     if (ptr) 
     {
         ptr->Pitch=0;
-        ptr->U=ptr->V=ptr->Y=0;
-        ptr->A=ptr->R=ptr->G=ptr->B=0;
+        ptr->U = ptr->V = ptr->Y = NULL;
+        ptr->A = ptr->R = ptr->G = ptr->B = NULL;
     }
 
     return MFX_ERR_NONE;
 }
-
 
 mfxStatus D3D11FrameAllocator::GetFrameHDL(mfxMemId mid, mfxHDL *handle)
 {
@@ -314,103 +239,79 @@ mfxStatus D3D11FrameAllocator::ReleaseResponse(mfxFrameAllocResponse *response)
 mfxStatus D3D11FrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrameAllocResponse *response)
 {
     HRESULT hRes;
-
     DXGI_FORMAT colorFormat = ConverColortFormat(request->Info.FourCC);
 
-    if (DXGI_FORMAT_UNKNOWN == colorFormat)
-    {
-       return MFX_ERR_UNSUPPORTED;
-    }
-    
+    // Only support NV12
+    MSDK_CHECK_NOT_EQUAL(colorFormat, DXGI_FORMAT_NV12, MFX_ERR_UNSUPPORTED);
+
     TextureResource newTexture;
 
-    if (request->Info.FourCC == MFX_FOURCC_P8) 
+    D3D11_TEXTURE2D_DESC desc = {0};
+
+    desc.Width = request->Info.Width;
+    desc.Height =  request->Info.Height;
+
+    desc.MipLevels = 1;
+    //number of subresources is 1 in case of not single texture
+    desc.ArraySize = m_initParams.bUseSingleTexture ? request->NumFrameSuggested : 1;
+    desc.Format = ConverColortFormat(request->Info.FourCC);
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.MiscFlags = m_initParams.uncompressedResourceMiscFlags;
+
+    desc.BindFlags = D3D11_BIND_DECODER;
+
+    if ( (MFX_MEMTYPE_FROM_VPPIN & request->Type) && (DXGI_FORMAT_YUY2 == desc.Format) || 
+        (DXGI_FORMAT_B8G8R8A8_UNORM == desc.Format) )
     {
-        D3D11_BUFFER_DESC desc = { 0 };
-
-        desc.ByteWidth           = request->Info.Width * request->Info.Height;
-        desc.Usage               = D3D11_USAGE_STAGING;
-        desc.BindFlags           = 0;
-        desc.CPUAccessFlags      = D3D11_CPU_ACCESS_READ;
-        desc.MiscFlags           = 0;
-        desc.StructureByteStride = 0;
-
-        ID3D11Buffer * buffer = 0;
-        hRes = m_initParams.pDevice->CreateBuffer(&desc, 0, &buffer);
-        if (FAILED(hRes))
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+        if (desc.ArraySize > 2)
             return MFX_ERR_MEMORY_ALLOC;
-
-        newTexture.textures.push_back(reinterpret_cast<ID3D11Texture2D *>(buffer));
     }
-    else
+
+    if ( (MFX_MEMTYPE_FROM_VPPOUT & request->Type) ||
+        (MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET & request->Type))
     {
-        D3D11_TEXTURE2D_DESC desc = {0};
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+        if (desc.ArraySize > 2)
+            return MFX_ERR_MEMORY_ALLOC;       
+    }
 
-        desc.Width = request->Info.Width;
-        desc.Height =  request->Info.Height;
-
-        desc.MipLevels = 1;
-        //number of subresources is 1 in case of not single texture
-        desc.ArraySize = m_initParams.bUseSingleTexture ? request->NumFrameSuggested : 1;
-        desc.Format = ConverColortFormat(request->Info.FourCC);
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.MiscFlags = m_initParams.uncompressedResourceMiscFlags;
-
-        desc.BindFlags = D3D11_BIND_DECODER;
-
-        if ( (MFX_MEMTYPE_FROM_VPPIN & request->Type) && (DXGI_FORMAT_YUY2 == desc.Format) || 
-             (DXGI_FORMAT_B8G8R8A8_UNORM == desc.Format) )
-        {
-            desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-            if (desc.ArraySize > 2)
-                return MFX_ERR_MEMORY_ALLOC;
-        }
-
-        if ( (MFX_MEMTYPE_FROM_VPPOUT & request->Type) ||
-             (MFX_MEMTYPE_VIDEO_MEMORY_PROCESSOR_TARGET & request->Type))
-        {
-            desc.BindFlags = D3D11_BIND_RENDER_TARGET;
-            if (desc.ArraySize > 2)
-                return MFX_ERR_MEMORY_ALLOC;       
-        }
-        
-        if( DXGI_FORMAT_P8 == desc.Format )
-        {
-            desc.BindFlags = 0;
-        }
-
-        ID3D11Texture2D* pTexture2D;
-
-        for(size_t i = 0; i < request->NumFrameSuggested / desc.ArraySize; i++)
-        {
-            hRes = m_initParams.pDevice->CreateTexture2D(&desc, NULL, &pTexture2D);
-
-            if (FAILED(hRes))
-            {
-                MSDK_TRACE("CreateTexture2D(%d) failed, hr = 0x%lX\n", (int)i, hRes);
-                return MFX_ERR_MEMORY_ALLOC;
-            }
-            newTexture.textures.push_back(pTexture2D);
-        }
-
-        desc.ArraySize = 1;
-        desc.Usage = D3D11_USAGE_STAGING;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    if( DXGI_FORMAT_P8 == desc.Format )
+    {
         desc.BindFlags = 0;
-        desc.MiscFlags = 0;
+    }
 
-        for(size_t i = 0; i < request->NumFrameSuggested; i++)
+    ID3D11Texture2D* pTexture2D;
+
+    for(size_t i = 0; i < request->NumFrameSuggested / desc.ArraySize; i++)
+    {
+        hRes = m_initParams.pDevice->CreateTexture2D(&desc, NULL, &pTexture2D);
+
+        if (FAILED(hRes))
         {
-            hRes = m_initParams.pDevice->CreateTexture2D(&desc, NULL, &pTexture2D);
-
-            if (FAILED(hRes))
-            {        
-                MSDK_TRACE("Create staging texture(%d) failed hr = 0x%lX\n", (int)i, hRes);
-                return MFX_ERR_MEMORY_ALLOC;
-            }
-            newTexture.stagingTexture.push_back(pTexture2D);
+            MSDK_TRACE("CreateTexture2D(%d) failed, hr = 0x%lX\n", (int)i, hRes);
+            return MFX_ERR_MEMORY_ALLOC;
         }
+        newTexture.textures.push_back(pTexture2D);
+    }
+
+    desc.ArraySize = 1;
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    desc.BindFlags = 0;
+    desc.MiscFlags = 0;
+
+    for (size_t i = 0; i < request->NumFrameSuggested; ++i)
+    {
+        hRes = m_initParams.pDevice->CreateTexture2D(&desc, NULL, &pTexture2D);
+
+        if (FAILED(hRes))
+        {        
+            MSDK_TRACE("Create staging texture(%d) failed hr = 0x%lX\n", (int)i, hRes);
+            return MFX_ERR_MEMORY_ALLOC;
+        }
+        newTexture.stagingTexture.push_back(pTexture2D);
     }
     
     // mapping to self created handles array, starting from zero or from last assigned handle + 1
@@ -431,7 +332,7 @@ mfxStatus D3D11FrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrame
     response->NumFrameActual = request->NumFrameSuggested;
     
     //iterator prior end()
-    std::list <TextureResource>::iterator it_last = m_resourcesByRequest.end();
+    auto it_last = m_resourcesByRequest.end();
     //fill map
     std::fill_n(std::back_inserter(m_memIdMap), request->NumFrameSuggested, --it_last);
 

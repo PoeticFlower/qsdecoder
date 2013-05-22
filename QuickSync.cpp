@@ -1357,29 +1357,39 @@ void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData
     size_t height = pSurface->Info.CropH; // Cropped image height
     size_t pitch  = frameData.Pitch;      // Image line + padding in bytes --> set by the driver
 
-    // Offset output buffer's address for fastest SSE4.1 copy.
-    // Page offset (12 lsb of addresses) sould be 2K apart from source buffer
-    size_t offset = ((size_t)frameData.Y & PAGE_MASK) ^ (1 << 11);
-    
-    // Mark Y, U & V pointers on output buffer
-    outFrameData.y = pOutBuffer->GetBuffer() + offset;
-    outFrameData.u = outFrameData.y + (pitch * height);
-    outFrameData.v = 0;
-    outFrameData.a = 0;
+    if (m_pDecoder->IsD3D11Alloc())
+    {
+        outFrameData.y = frameData.Y + (pSurface->Info.CropY * pitch), height * pitch;
+        outFrameData.u = frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2;
+        outFrameData.v = 0;
+        outFrameData.a = 0;
+    }
+    else
+    {
+        // Offset output buffer's address for fastest SSE4.1 copy.
+        // Page offset (12 lsb of addresses) sould be 2K apart from source buffer
+        size_t offset = ((size_t)frameData.Y & PAGE_MASK) ^ (1 << 11);
 
-    // App can modify this buffer
-    outFrameData.bReadOnly = false;
+        // Mark Y, U & V pointers on output buffer
+        outFrameData.y = pOutBuffer->GetBuffer() + offset;
+        outFrameData.u = outFrameData.y + (pitch * height);
+        outFrameData.v = 0;
+        outFrameData.a = 0;
+
+        // App can modify this buffer
+        outFrameData.bReadOnly = false;
 #if 1 // Use this to disable actual copying for benchmarking
-    Tmemcpy memcpyFunc = (m_pDecoder->IsD3DAlloc()) ?
-        ( (m_Config.bEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy_sse41 ) :
-        ( (m_Config.bEnableMtCopy) ? mt_memcpy     : memcpy );
+        Tmemcpy memcpyFunc = (m_pDecoder->IsD3DAlloc()) ?
+            ( (m_Config.bEnableMtCopy) ? mt_gpu_memcpy : gpu_memcpy_sse41 ) :
+            ( (m_Config.bEnableMtCopy) ? mt_memcpy     : memcpy );
 
-    // Copy Y
-    !m_bNeedToFlush && memcpyFunc(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
+        // Copy Y
+        !m_bNeedToFlush && memcpyFunc(outFrameData.y, frameData.Y + (pSurface->Info.CropY * pitch), height * pitch);
 
-    // Copy UV
-    !m_bNeedToFlush && memcpyFunc(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
+        // Copy UV
+        !m_bNeedToFlush && memcpyFunc(outFrameData.u, frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2);
 #endif
+    }
 
 #ifdef _DEBUG
     // Debug only - mark top left corner: when working with D3D
