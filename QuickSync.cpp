@@ -122,6 +122,7 @@ CQuickSync::CQuickSync() :
     {
 #if MFX_D3D11_SUPPORT
         m_Config.bEnableD3D11 = true;
+//        m_Config.bDefaultToD3D11 = true;
 #endif
     }
     m_pDecoder = new CQuickSyncDecoder(m_Config, sts);
@@ -551,7 +552,10 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
     }
 
     _snprintf_s(m_CodecName, MSDK_ARRAY_LEN(m_CodecName), MSDK_ARRAY_LEN(m_CodecName)-1,
-        "Intel\xae QuickSync Decoder (%s)" , ::GetCodecName(m_DecVideoParams.mfx.CodecId));
+        "Intel\xae QuickSync Decoder (%s) - %s",
+        ::GetCodecName(m_DecVideoParams.mfx.CodecId),
+        (m_pDecoder->IsHwAccelerated()) ? (m_pDecoder->IsD3D11Alloc() ? "HW D3D11" : "HW D3D9" ) : "SW"
+        );
 
     delete[] (mfxU8*)vih2;
     m_OK = MSDK_SUCCEEDED(sts);

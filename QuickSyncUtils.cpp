@@ -472,10 +472,9 @@ static void* mt_copy(void* d, const void* s, size_t size, Tmemcpy memcpyFunc)
     }
 
     size_t blockSize = (size / 2) & ~31; // Make size a multiple of 32 bytes
-    std::array<size_t, 3> offsets = { 0, blockSize, size };
-    std::array<size_t, 2> indexes = { 0, 1 };
+    const size_t offsets[] = { 0, blockSize, size };
 
-    Concurrency::parallel_for_each(indexes.begin(), indexes.end(), [d, s, offsets, memcpyFunc](size_t& i)
+    Concurrency::parallel_for(0, 2, [d, s, &offsets, memcpyFunc](int i)
     {
         memcpyFunc((char*)d + offsets[i], (const char*)s + offsets[i], offsets[i + 1] - offsets[i]);
     });
