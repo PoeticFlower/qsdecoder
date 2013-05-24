@@ -67,7 +67,7 @@ D3D11FrameAllocator::~D3D11FrameAllocator()
     Close();
 }
 
-D3D11FrameAllocator::TextureSubResource  D3D11FrameAllocator::GetResourceFromMid(mfxMemId mid)
+D3D11FrameAllocator::TextureSubResource D3D11FrameAllocator::GetResourceFromMid(mfxMemId mid)
 {
     size_t index = (size_t)MFXReadWriteMid(mid).raw() - 1;
     
@@ -136,7 +136,25 @@ mfxStatus D3D11FrameAllocator::LockFrame(mfxMemId mid, mfxFrameData *ptr)
             return MFX_ERR_LOCK_MEMORY;
         }
 
-        m_pDeviceContext->CopySubresourceRegion(sr.GetStaging(), 0, 0, 0, 0, sr.GetTexture(), sr.GetSubResource(), NULL); 
+        // copy original frame to staging frame - CPU can't access original frame
+        // parallel copy is a little faster
+        D3D11_BOX box;
+        MSDK_ZERO_VAR(box);
+        D3D11_TEXTURE2D_DESC desc;
+        sr.GetTexture()->GetDesc(&desc);
+        box.right = desc.Width;
+        box.bottom = desc.Height;
+
+        int count = 2;
+        ID3D11DeviceContext* pDeviceContext = m_pDeviceContext;
+        Concurrency::parallel_for(0, count+1, [pDeviceContext, &sr, &box, count](int i)
+        {
+            int block = MSDK_ALIGN16(box.bottom / count);
+            D3D11_BOX tmp_box = box;
+            tmp_box.top    = i * block;
+            tmp_box.bottom = (i == count) ? box.bottom : tmp_box.top + block;
+            pDeviceContext->CopySubresourceRegion(sr.GetStaging(), 0, tmp_box.left, tmp_box.top, 0, sr.GetTexture(), sr.GetSubResource(), &tmp_box); 
+        });
 
         do
         {
@@ -248,8 +266,8 @@ mfxStatus D3D11FrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrame
 
     D3D11_TEXTURE2D_DESC desc = {0};
 
-    desc.Width = request->Info.Width;
-    desc.Height =  request->Info.Height;
+    desc.Width  = request->Info.Width;
+    desc.Height = request->Info.Height;
 
     desc.MipLevels = 1;
     //number of subresources is 1 in case of not single texture
@@ -258,7 +276,6 @@ mfxStatus D3D11FrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrame
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.MiscFlags = m_initParams.uncompressedResourceMiscFlags;
-
     desc.BindFlags = D3D11_BIND_DECODER;
 
     if ( (MFX_MEMTYPE_FROM_VPPIN & request->Type) && (DXGI_FORMAT_YUY2 == desc.Format) || 
@@ -277,14 +294,14 @@ mfxStatus D3D11FrameAllocator::AllocImpl(mfxFrameAllocRequest *request, mfxFrame
             return MFX_ERR_MEMORY_ALLOC;       
     }
 
-    if( DXGI_FORMAT_P8 == desc.Format )
+    if ( DXGI_FORMAT_P8 == desc.Format )
     {
         desc.BindFlags = 0;
     }
 
     ID3D11Texture2D* pTexture2D;
 
-    for(size_t i = 0; i < request->NumFrameSuggested / desc.ArraySize; i++)
+    for (size_t i = 0; i < request->NumFrameSuggested / desc.ArraySize; ++i)
     {
         hRes = m_initParams.pDevice->CreateTexture2D(&desc, NULL, &pTexture2D);
 

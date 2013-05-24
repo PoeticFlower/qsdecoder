@@ -43,7 +43,7 @@
 #include <vector>
 #include <deque>
 #include <set>
-#include <array>
+#include <algorithm>
 
 // PPL
 #include <ppl.h>

@@ -29,7 +29,7 @@
 #pragma once
 
 #define QS_DEC_DLL_NAME "IntelQuickSyncDecoder.dll"
-#define QS_DEC_VERSION  "v0.42"
+#define QS_DEC_VERSION  "v0.43"
 
 // Forward declarations
 struct IDirect3DDeviceManager9;
@@ -143,7 +143,8 @@ struct CQsConfig
                                                     // False: when a frame is marked as duplicated it will be sent out with a modified time
                                                     //        stamp based on the first frame and frame rate. Useful for transcoding.
             bool     bEnableD3D11             :  1; // Enable use of Direct3D 11.1 for HW acceleration (Windows 8 and newer OS)
-            unsigned reserved1                : 13;
+            bool     bDefaultToD3D11          :  1; // Prefare D3D11 over D3D9.
+            unsigned reserved1                : 12;
         };
     };
 
