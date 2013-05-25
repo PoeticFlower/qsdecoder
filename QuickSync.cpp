@@ -117,7 +117,7 @@ CQuickSync::CQuickSync() :
         return;
     }
     // D3D11 decode was introduced with Win8 (Windows 6.2)
-    // Window Vidta and 7 can use D3D9
+    // Window Vista and 7 can use D3D9
     else if ((dwMajorVersion == 6 && dwMinorVersion >= 2) || (dwMajorVersion > 6))
     {
 #if MFX_D3D11_SUPPORT
