@@ -23,6 +23,8 @@
     #pragma message("\tMust have Windows SDK 8.0 installed and environment variable INTELMEDIASDK_WINSDK_PATH")
     #pragma message("\tshould point to it.")
     #pragma message("\te.g. \"C:\\Program Files (x86)\\Windows Kits\\8.0\"")
+    // disable depracated warnings from VC10's Windows SDK 7.0
+    #pragma warning(disable: 4995)
 #endif
 
 #include <d3d9.h>
