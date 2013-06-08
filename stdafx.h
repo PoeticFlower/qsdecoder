@@ -11,6 +11,7 @@
 #include <tchar.h>
 #include <stdio.h>
 #include <process.h>
+#include <stdint.h>
 
 // Platform SDK
 #include <sdkddkver.h>

@@ -1,82 +1,115 @@
 /*
-*      Copyright (C) 2010-2012 Hendrik Leppkes
-*      http://www.1f0.de
-*
-*  This program is free software; you can redistribute it and/or modify
-*  it under the terms of the GNU General Public License as published by
-*  the Free Software Foundation; either version 2 of the License, or
-*  (at your option) any later version.
-*
-*  This program is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License along
-*  with this program; if not, write to the Free Software Foundation, Inc.,
-*  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-*
-*  Initial design and concept by Gabest and the MPC-HC Team, copyright under GPLv2
-*/
+ * Copyright (c) 2013, INTEL CORPORATION
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ * 
+ * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ * Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation and/or
+ * other materials provided with the distribution.
+ * Neither the name of INTEL CORPORATION nor the names of its contributors may
+ * be used to endorse or promote products derived from this software without specific
+ * prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+ * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #pragma once
 
-
-typedef enum
+enum H264_STREAM_TYPE
 {
-    NALU_TYPE_SLICE    = 1,
-    NALU_TYPE_DPA      = 2,
-    NALU_TYPE_DPB      = 3,
-    NALU_TYPE_DPC      = 4,
-    NALU_TYPE_IDR      = 5,
-    NALU_TYPE_SEI      = 6,
-    NALU_TYPE_SPS      = 7,
-    NALU_TYPE_PPS      = 8,
-    NALU_TYPE_AUD      = 9,
-    NALU_TYPE_EOSEQ    = 10,
-    NALU_TYPE_EOSTREAM = 11,
-    NALU_TYPE_FILL     = 12,
+    RTP     = 1, // No start codes - prefixed with length field
+    AnnexB  = 2  // With start codes (00 00 00 01) - first 00 is optional
+};
+
+enum NALU_TYPE
+{
+    NALU_TYPE_SLICE     = 1,
+    NALU_TYPE_DPA       = 2,
+    NALU_TYPE_DPB       = 3,
+    NALU_TYPE_DPC       = 4,
+    NALU_TYPE_IDR       = 5,
+    NALU_TYPE_SEI       = 6,
+    NALU_TYPE_SPS       = 7,
+    NALU_TYPE_PPS       = 8,
+    NALU_TYPE_AUD       = 9,
+    NALU_TYPE_EOSEQ     = 10,
+    NALU_TYPE_EOSTREAM  = 11,
+    NALU_TYPE_FILL      = 12,
     NALU_TYPE_MAX_VALID = 12
-} NALU_TYPE;
+};
 
-#define IS_VALID_NALU(nalu) (nalu > 0 && nalu <= NALU_TYPE_MAX_VALID)
+ enum NALU_REF_IDC
+ {
+    NALU_PRIORITY_DISPOSABLE  = 0,
+    NALU_PRIORITY_LOW         = 1,
+    NALU_PRIORITY_HIGH        = 2,
+    NALU_PRIORITY_HIGHEST     = 3
+ };
 
-class CH264Nalu
+union H264_NAL
 {
-private :
-    int        forbidden_bit;      //! should be always FALSE
-    int        nal_reference_idc;  //! NALU_PRIORITY_xxxx
-    NALU_TYPE  nal_unit_type;      //! NALU_TYPE_xxxx
-
-    size_t     m_nNALStartPos;     //! NALU start (including startcode / size)
-    size_t     m_nNALDataPos;      //! Useful part
-
-    const BYTE *m_pBuffer;
-    size_t     m_nCurPos;
-    size_t     m_nNextRTP;
-    size_t     m_nSize;
-    int        m_nNALSize;
-
-    bool      MoveToNextAnnexBStartcode();
-    bool      MoveToNextRTPStartcode();
-
-public :
-    CH264Nalu() { SetBuffer(NULL, 0, 0); }
-    NALU_TYPE GetType() const { return nal_unit_type; }
-    bool      IsRefFrame() const { return (nal_reference_idc != 0); }
-
-    size_t    GetDataLength() const { return m_nCurPos - m_nNALDataPos; }
-    const BYTE *GetDataBuffer() { return m_pBuffer + m_nNALDataPos; }
-    size_t    GetRoundedDataLength() const
+    uint8_t data;
+    struct
     {
-        size_t nSize = m_nCurPos - m_nNALDataPos;
-        return nSize + 128 - (nSize %128);
-    }
+        NALU_TYPE nal_unit_type     : 5;
+        unsigned  nal_reference_idc : 2; /* VS2010 treat  NALU_REF_IDC as signed - should be unsigned*/
+        unsigned  forbidden_bit     : 1;
+    };
+};
 
-    size_t    GetLength() const { return m_nCurPos - m_nNALStartPos; }
-    const BYTE *GetNALBuffer() { return m_pBuffer + m_nNALStartPos; }
-    bool      IsEOF() const { return m_nCurPos >= m_nSize; }
+enum H264_NAL_RC
+{
+    NALU_OK      = 0,  // Full NAL
+    NALU_PARTIAL = 1,  // partial - need to resend the partial packet concatinated to the next packet
+    NALU_INVALID = 2,  // Invalid attributes - decoder should usually discard this one
+    NALU_EOS     = 3   // End of stream - nothing to output
+};
 
-    void      SetBuffer (const BYTE *pBuffer, size_t nSize, int nNALSize);
-    bool      ReadNext();
+#define IS_VALID_NALU(n) (n > 0 && n <= NALU_TYPE_MAX_VALID)
+
+class H264_NaluIterator
+{
+public:
+    H264_NaluIterator(const uint8_t *pBuffer, size_t bufSize, int nalSize);
+    H264_STREAM_TYPE GetStreamType() const { return m_StreamType; }
+    NALU_TYPE      GetNaluType() const { return m_Nal.nal_unit_type; }
+    NALU_REF_IDC   GetNaluRefIdc() const { return (NALU_REF_IDC)m_Nal.nal_reference_idc; }
+    bool           IsRefFrame() const { return (m_Nal.nal_reference_idc != NALU_PRIORITY_DISPOSABLE); }
+    size_t         GetDataLength() const { return m_CurPos - m_NalDataPos; }
+    const uint8_t* GetDataBuffer() const { return m_pBuffer + m_NalDataPos; }
+    size_t         GetNalLength() const { return m_CurPos - m_NalPos; }
+    const uint8_t* GetNALBuffer() const { return m_pBuffer + m_NalPos; }
+    bool IsEOF() const { return m_CurPos >= m_BufSize; }
+    H264_NAL_RC Next();
+
+private:
+    // No copying supported!
+    H264_NaluIterator(const H264_NaluIterator&);
+    H264_NaluIterator& operator=(const H264_NaluIterator&);
+
+    bool FindNextStartCode();
+
+    // data members
+    const int        m_NalSize;
+    const uint8_t*   m_pBuffer;
+    const size_t     m_BufSize;
+    H264_STREAM_TYPE m_StreamType;  // Either AVC or AnnexB
+    H264_NAL         m_Nal;
+    size_t           m_CurPos;
+    size_t           m_NextRTP;
+    size_t           m_NalPos;      // NALU start (including startcode / size)
+    size_t           m_NalDataPos;  // Data part of NALU
 };

@@ -58,21 +58,21 @@ CFrameConstructor::CFrameConstructor()
 {
     m_bSeqHeaderInserted = false;
     m_bDvdStripPackets = false;
-    MSDK_ZERO_VAR(m_ResidualBS);
+    MSDK_ZERO_VAR(m_ResidialBS);
     MSDK_ZERO_VAR(m_Headers);
-    m_ResidualBS.MaxLength = 100;
-    m_ResidualBS.Data = new mfxU8[m_ResidualBS.MaxLength];
+    m_ResidialBS.MaxLength = 100;
+    m_ResidialBS.Data = new mfxU8[m_ResidialBS.MaxLength];
 }
 
 CFrameConstructor::~CFrameConstructor() 
 {
-    delete[] m_ResidualBS.Data;
+    delete[] m_ResidialBS.Data;
     delete[] m_Headers.Data;
 }
 
 void CFrameConstructor::Reset()
 {
-    m_ResidualBS.DataOffset = m_ResidualBS.DataLength = 0;
+    m_ResidialBS.DataOffset = m_ResidialBS.DataLength = 0;
     m_bSeqHeaderInserted = false;
 }
 
@@ -88,23 +88,23 @@ void CFrameConstructor::UpdateTimeStamp(IMediaSample* pSample, mfxBitstream* pBS
 void CFrameConstructor::SaveResidualData(mfxBitstream* pBS)
 {
     MSDK_CHECK_POINTER_NO_RET(pBS);
-    // m_ResidualBS must be empty
-    ASSERT(m_ResidualBS.DataLength == 0);
-    m_ResidualBS.DataOffset = 0;
-    m_ResidualBS.DataLength = pBS->DataLength;
+    // m_ResidialBS must be empty
+    ASSERT(m_ResidialBS.DataLength == 0);
+    m_ResidialBS.DataOffset = 0;
+    m_ResidialBS.DataLength = pBS->DataLength;
     
     // Check if a bigger buffer is needed
-    if (pBS->DataLength > m_ResidualBS.MaxLength)
+    if (pBS->DataLength > m_ResidialBS.MaxLength)
     {
-        delete[] m_ResidualBS.Data;
+        delete[] m_ResidialBS.Data;
         mfxU32 newSize = pBS->DataLength;
-        m_ResidualBS.Data = new mfxU8[newSize];
-        MSDK_CHECK_POINTER_NO_RET(m_ResidualBS.Data);
-        m_ResidualBS.MaxLength = newSize;
+        m_ResidialBS.Data = new mfxU8[newSize];
+        MSDK_CHECK_POINTER_NO_RET(m_ResidialBS.Data);
+        m_ResidialBS.MaxLength = newSize;
     }
 
     ASSERT(pBS->DataOffset + pBS->DataLength <= pBS->MaxLength);
-    memcpy(m_ResidualBS.Data, pBS->Data + pBS->DataOffset, pBS->DataLength);
+    memcpy(m_ResidialBS.Data, pBS->Data + pBS->DataOffset, pBS->DataLength);
 }
 
 mfxStatus CFrameConstructor::ConstructHeaders(
@@ -169,7 +169,7 @@ mfxStatus CFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstream*
     }
 
     // Prefix the sequence headers if needed
-    size_t newDataSize = nDataSize + m_ResidualBS.DataLength +
+    size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
                 ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength);
 
     pBS->MaxLength = pBS->DataLength = (mfxU32)newDataSize;
@@ -291,11 +291,11 @@ void CFrameConstructor::StripDvdPacket(BYTE*& p, int& len)
 
 void CFrameConstructor::WriteResidualData(mfxU8*& pData)
 {
-    if (m_ResidualBS.DataLength)
+    if (m_ResidialBS.DataLength)
     {
-        memcpy(pData, m_ResidualBS.Data, m_ResidualBS.DataLength);
-        pData += m_ResidualBS.DataLength;
-        m_ResidualBS.DataLength = 0;
+        memcpy(pData, m_ResidialBS.Data, m_ResidialBS.DataLength);
+        pData += m_ResidialBS.DataLength;
+        m_ResidialBS.DataLength = 0;
     }
 }
 
@@ -380,7 +380,7 @@ mfxStatus CVC1FrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     UpdateTimeStamp(pSample, pBS);
 
     // Prefix the sequence headers if needed
-    size_t newDataSize = nDataSize + m_ResidualBS.DataLength +
+    size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
         ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength) + // Add headers size 
         8; // Add upto 8 bytes for extra start codes
 
@@ -478,7 +478,7 @@ CAVCFrameConstructor::CAVCFrameConstructor()
     m_HeaderNalSize = 2;  //MSDN - MPEG2VideoInfo->dwSequenceHeader delimited by 2 byte length fields
     m_NalSize = 0;
     SetValue(0x01000000, m_H264StartCode);
-    m_TempBuffer.reserve(1<<20);
+    m_OutputBuffer.reserve(1<<20);
 }
 
 CAVCFrameConstructor::~CAVCFrameConstructor()
@@ -504,43 +504,49 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
 
     // SPS and/or PPS Data will be present
     mfxStatus sts = MFX_ERR_NONE; 
-    size_t nNalDataLen;          
-    const mfxU8* pNalDataBuff; 
-    CH264Nalu itStartCode;
     MSDK_ZERO_VAR(m_Headers);
-    m_TempBuffer.clear();
+    m_OutputBuffer.clear();
     m_NalSize = mp2->dwFlags;     
+    H264_NaluIterator itStartCode((BYTE*)mp2->dwSequenceHeader, mp2->cbSequenceHeader, m_HeaderNalSize); // Nal size = 2 
+    H264_NAL_RC rc;
+    bool eos = false;
 
-    itStartCode.SetBuffer((BYTE*)mp2->dwSequenceHeader, mp2->cbSequenceHeader, m_HeaderNalSize); // Nal size = 2 
-    while (itStartCode.ReadNext())
-    {    
-        nNalDataLen = itStartCode.GetDataLength(); 
-        pNalDataBuff = itStartCode.GetDataBuffer();
-        NALU_TYPE naluType = itStartCode.GetType();
-        switch (naluType)
+    while (!eos)
+    {
+        rc = itStartCode.Next();
+        NALU_TYPE naluType = itStartCode.GetNaluType();
+
+        switch (rc)
         {
-        case NALU_TYPE_SPS:
-        case NALU_TYPE_PPS: 
-            m_TempBuffer.insert(m_TempBuffer.end(), m_H264StartCode, m_H264StartCode + 4);
-            m_TempBuffer.insert(m_TempBuffer.end(), pNalDataBuff, pNalDataBuff+nNalDataLen);
-            break; 
-        default:
-            // Only keep valid NALUs
-            if (IS_VALID_NALU(naluType))
+        case NALU_PARTIAL: // For headers, partials are fine (h264 extra data)
+        case NALU_OK:
             {
-                sts = MFX_ERR_MORE_DATA; 
+                size_t nNalDataLen = itStartCode.GetDataLength();
+                const BYTE* pNalDataBuff = itStartCode.GetDataBuffer();
+                if (naluType == NALU_TYPE_SPS || naluType == NALU_TYPE_PPS)
+                {
+                    m_OutputBuffer.insert(m_OutputBuffer.end(), m_H264StartCode, m_H264StartCode + 4);
+                    m_OutputBuffer.insert(m_OutputBuffer.end(), pNalDataBuff, pNalDataBuff+nNalDataLen);
+                }
             }
             break;
-        }
+
+        case NALU_EOS:
+            eos = true;
+            break;
+
+        case NALU_INVALID:
+            break;
+        } // switch
     }
 
-    if (m_TempBuffer.size())
+    if (m_OutputBuffer.size())
     {
         // Keep a copy of the SPS/PPS to be placed into the decode stream (after each new segment).
         MSDK_SAFE_DELETE_ARRAY(m_Headers.Data);
-        m_Headers.Data = new mfxU8[m_TempBuffer.size()];
-        m_Headers.DataLength = m_Headers.MaxLength = (mfxU32)m_TempBuffer.size();
-        memcpy(m_Headers.Data, &m_TempBuffer.front(), m_TempBuffer.size());
+        m_Headers.Data = new mfxU8[m_OutputBuffer.size()];
+        m_Headers.DataLength = m_Headers.MaxLength = (mfxU32)m_OutputBuffer.size();
+        memcpy(m_Headers.Data, &m_OutputBuffer.front(), m_OutputBuffer.size());
     }
 
     return sts; 
@@ -548,12 +554,6 @@ mfxStatus CAVCFrameConstructor::ConstructHeaders(VIDEOINFOHEADER2* vih,
 
 mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS)
 {
-    // AnnexB style stream - just copy the buffer as is.
-    if (0 == m_NalSize)
-    {
-        return CFrameConstructor::ConstructFrame(pSample, pBS);
-    }
-
     mfxU8* pDataBuffer = NULL;    
     MSDK_CHECK_POINTER(pSample, MFX_ERR_NULL_PTR); 
     MSDK_CHECK_POINTER(pBS, MFX_ERR_NULL_PTR); 
@@ -565,50 +565,77 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
 
     pSample->GetPointer(&pDataBuffer);
     MSDK_CHECK_POINTER(pDataBuffer, MFX_ERR_NULL_PTR);
-    m_TempBuffer.clear();
-    m_TempBuffer.reserve(nDataSize);
-    
-    CH264Nalu itStartCode;
-    itStartCode.SetBuffer(pDataBuffer, nDataSize, m_NalSize); // Nal size = 4 (usually); declared in extra data (ConstructHeaders)
 
-    // Iterate over the NALUs and convert them to have start codes.
-    while (itStartCode.ReadNext())
+    if (!m_InputBuffer.empty())
     {
-        NALU_TYPE naluType = itStartCode.GetType();
-
-        // Discard AUD NALUs
-        if (NALU_TYPE_AUD == naluType)
-            continue;
-
-        if (!IS_VALID_NALU(naluType))
-            continue;
-
-        size_t nNalDataLen =  itStartCode.GetDataLength(); 
-        const BYTE* pNalDataBuff = itStartCode.GetDataBuffer();
-
-        ASSERT(nNalDataLen > 0); // Shouldn't fail!
-        if (nNalDataLen > 0)
-        {
-            m_TempBuffer.insert(m_TempBuffer.end(), m_H264StartCode, m_H264StartCode + 4);
-            m_TempBuffer.insert(m_TempBuffer.end(), pNalDataBuff, pNalDataBuff + nNalDataLen);
-        }
+        m_InputBuffer.insert(m_InputBuffer.end(), pDataBuffer, pDataBuffer + nDataSize);
+        pDataBuffer = &m_InputBuffer.front();
+        nDataSize = (mfxU32)m_InputBuffer.size();
     }
 
-    if (m_TempBuffer.empty())
+    m_OutputBuffer.clear();
+    m_OutputBuffer.reserve(nDataSize);
+
+    H264_NaluIterator itStartCode(pDataBuffer, nDataSize, m_NalSize); // Nal size = 4 (usually); declared in extra data (ConstructHeaders)
+    bool eos = false;
+    // Iterate over the NALUs and convert them to have start codes.
+    while (!eos)
+    {
+        H264_NAL_RC rc = itStartCode.Next();
+        NALU_TYPE naluType = itStartCode.GetNaluType();
+
+        switch (rc)
+        {
+        case NALU_OK:
+            {                
+                // Discard AUD NALUs
+                if (NALU_TYPE_AUD == naluType)
+                    continue;
+
+                size_t nNalDataLen = itStartCode.GetDataLength(); 
+                const BYTE* pNalDataBuff = itStartCode.GetDataBuffer();
+                
+                m_OutputBuffer.insert(m_OutputBuffer.end(), m_H264StartCode, m_H264StartCode + 4);
+                m_OutputBuffer.insert(m_OutputBuffer.end(), pNalDataBuff, pNalDataBuff + nNalDataLen);
+            }
+            break;
+
+        // Got partial NAL, save it for next run
+        // Note - The residial data buffer contains processed NALs.
+        //        Here we need to save unprocessed NALs.
+        case NALU_PARTIAL:
+            {
+                 std::vector<mfxU8> temp;
+                 size_t start = (itStartCode.GetNALBuffer() - pDataBuffer);
+                 temp.insert(temp.end(), pDataBuffer + start, pDataBuffer + nDataSize);
+                 m_InputBuffer.swap(temp);
+            }
+            break;
+
+        case NALU_EOS:
+            eos = true;
+            break;
+
+        case NALU_INVALID: // discard
+            break;
+        } // switch
+    }
+
+    if (m_OutputBuffer.empty())
     {
         return MFX_ERR_NONE;
     }
 
     // Update data size
-    nDataSize = (mfxU32)m_TempBuffer.size();
-    pDataBuffer = &m_TempBuffer.front();
-    size_t newDataSize = nDataSize + m_ResidualBS.DataLength +
+    nDataSize = (mfxU32)m_OutputBuffer.size();
+    pDataBuffer = &m_OutputBuffer.front();
+    size_t newDataSize = nDataSize + m_ResidialBS.DataLength +
         ((m_bSeqHeaderInserted) ? 0 : m_Headers.DataLength);
 
     mfxU8* pData = pBS->Data = new mfxU8[newDataSize];
     pBS->MaxLength = (mfxU32)newDataSize;
 
-    // Write data left from previous samples
+    // Write data left from previous samples (processed data)
     WriteResidualData(pData);
 
     // Write sequence headers if needed
@@ -619,4 +646,10 @@ mfxStatus CAVCFrameConstructor::ConstructFrame(IMediaSample* pSample, mfxBitstre
     pBS->DataLength = (mfxU32)(pData - pBS->Data);
 
     return MFX_ERR_NONE;
+}
+
+void CAVCFrameConstructor::Reset()
+{
+    CFrameConstructor::Reset();
+    m_InputBuffer.clear();
 }

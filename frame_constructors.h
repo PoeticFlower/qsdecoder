@@ -50,7 +50,7 @@ protected:
     bool m_bSeqHeaderInserted;
     bool m_bDvdStripPackets;
     mfxBitstream m_Headers; 
-    mfxBitstream m_ResidualBS;
+    mfxBitstream m_ResidialBS;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -82,10 +82,12 @@ public:
         const GUID& guidFormat,
         size_t nMtSize,
         size_t nVideoInfoSize);
+    void Reset();
 
 private:
     mfxU32             m_NalSize; 
     mfxU32             m_HeaderNalSize; 
     mfxU8              m_H264StartCode[4];
-    std::vector<mfxU8> m_TempBuffer;         // used for building the output stream
+    std::vector<mfxU8> m_InputBuffer;
+    std::vector<mfxU8> m_OutputBuffer;       // Used for building the output stream
 };
