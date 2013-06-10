@@ -136,6 +136,7 @@ mfxStatus D3D11FrameAllocator::LockFrame(mfxMemId mid, mfxFrameData *ptr)
             return MFX_ERR_LOCK_MEMORY;
         }
 
+#ifdef D3D11_PARALLEL_COPY  
         // copy original frame to staging frame - CPU can't access original frame
         // parallel copy is a little faster
         D3D11_BOX box;
@@ -155,7 +156,10 @@ mfxStatus D3D11FrameAllocator::LockFrame(mfxMemId mid, mfxFrameData *ptr)
             tmp_box.bottom = (i == count) ? box.bottom : tmp_box.top + block;
             pDeviceContext->CopySubresourceRegion(sr.GetStaging(), 0, tmp_box.left, tmp_box.top, 0, sr.GetTexture(), sr.GetSubResource(), &tmp_box); 
         });
-
+#else
+        // Single threaded copy
+        m_pDeviceContext->CopySubresourceRegion(sr.GetStaging(), 0, 0, 0, 0, sr.GetTexture(), sr.GetSubResource(), NULL); 
+#endif
         do
         {
             hRes = m_pDeviceContext->Map(sr.GetStaging(), 0, mapType, mapFlags, &lockedRect);
