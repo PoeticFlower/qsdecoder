@@ -70,14 +70,13 @@ mfxStatus CD3D9Device::FillD3DPP(mfxHDL hWindow, D3DPRESENT_PARAMETERS &D3DPP)
 
 mfxStatus CD3D9Device::Init(int nAdapterNum)
 {
-    if (m_pDeviceManager9)
+    mfxStatus sts = InitFromScratch(nAdapterNum);
+    if (sts != MFX_ERR_NONE && m_pDeviceManager9)
     {
-        return InitFromRenderer(nAdapterNum);
+        Close();
+        sts = InitFromRenderer(nAdapterNum);
     }
-    else
-    {
-        return InitFromScratch(nAdapterNum);
-    }
+    return sts;
 }
 
 mfxStatus CD3D9Device::Reset()
