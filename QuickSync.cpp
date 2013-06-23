@@ -196,10 +196,10 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
 
         videoParams.mfx.CodecId = MFX_CODEC_AVC;
         // Note: CAVCFrameConstructor can handle both H264 stream types but it can't handle fragment streams (e.g. live TV)
-//        pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
-//            new CAVCFrameConstructor :
-//            new CFrameConstructor;
-        pFrameConstructor = new CAVCFrameConstructor;
+        pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
+            new CAVCFrameConstructor :
+            new CFrameConstructor;
+        //pFrameConstructor = new CAVCFrameConstructor;
     }
     else
     {
