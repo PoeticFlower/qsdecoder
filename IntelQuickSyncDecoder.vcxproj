@@ -118,6 +118,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MinimalRebuild>false</MinimalRebuild>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -128,6 +129,7 @@
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+     <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
     </Link>
     <ResourceCompile>
@@ -147,6 +149,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -155,6 +158,7 @@
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;libmfx.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib\x64;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
     </Link>
     <ResourceCompile>
@@ -169,6 +173,7 @@
       </DisableSpecificWarnings>
       <WarningLevel>Level4</WarningLevel>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -185,6 +190,7 @@
       <ModuleDefinitionFile>IntelQuickSyncDecoder.def</ModuleDefinitionFile>
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;libmfx.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <OptimizeReferences>true</OptimizeReferences>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
@@ -209,6 +215,7 @@
       </DisableSpecificWarnings>
       <WarningLevel>Level4</WarningLevel>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -225,6 +232,7 @@
       <ModuleDefinitionFile>IntelQuickSyncDecoder.def</ModuleDefinitionFile>
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;libmfx.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib\x64;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '11.0' Or '$(VisualStudioVersion)' == '12.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
