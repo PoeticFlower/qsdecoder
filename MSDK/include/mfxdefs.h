@@ -1,10 +1,28 @@
 /* ****************************************************************************** *\
 
-INTEL CORPORATION PROPRIETARY INFORMATION
-This software is supplied under the terms of a license agreement or nondisclosure
-agreement with Intel Corporation and may not be copied or disclosed except in
-accordance with the terms of that agreement
-Copyright(c) 2007-2012 Intel Corporation. All Rights Reserved.
+Copyright (C) 2007-2013 Intel Corporation.  All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+- Redistributions of source code must retain the above copyright notice,
+this list of conditions and the following disclaimer.
+- Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+- Neither the name of Intel Corporation nor the names of its contributors
+may be used to endorse or promote products derived from this software
+without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY INTEL CORPORATION "AS IS" AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL INTEL CORPORATION BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 File Name: mfxdefs.h
 
@@ -17,13 +35,22 @@ extern "C"
 {
 #endif /* __cplusplus */
 
-#if defined( _WIN32 ) || defined ( _WIN64 )
+
+#if (defined( _WIN32 ) || defined ( _WIN64 )) && !defined (__GNUC__)
   #define __INT64   __int64
   #define __UINT64  unsigned __int64
 #else
   #define __INT64   long long
   #define __UINT64  unsigned long long
 #endif
+
+#ifdef _WIN32
+    #define MFX_CDECL __cdecl
+    #define MFX_STDCALL __stdcall
+#else
+    #define MFX_CDECL
+    #define MFX_STDCALL
+#endif /* _WIN32 */
 
 #define MFX_INFINITE 0xFFFFFFFF
 
@@ -47,6 +74,7 @@ typedef __INT64             mfxI64;
 typedef void*               mfxHDL;
 typedef mfxHDL              mfxMemId;
 typedef void*               mfxThreadTask;
+typedef char                mfxChar;
 
 typedef struct {
     mfxI16  x;
@@ -88,6 +116,8 @@ typedef enum
     MFX_ERR_UNDEFINED_BEHAVIOR          = -16,  /* undefined behavior */
     MFX_ERR_DEVICE_FAILED               = -17,  /* device operation failure */
     MFX_ERR_MORE_BITSTREAM              = -18,  /* expect more bitstream buffers at output */
+    MFX_ERR_INCOMPATIBLE_AUDIO_PARAM    = -19,  /* incompatible audio parameters */
+    MFX_ERR_INVALID_AUDIO_PARAM         = -20,  /* invalid audio parameters */
 
     /* warnings >0 */
     MFX_WRN_IN_EXECUTION                = 1,    /* the previous asynchrous operation is in execution */
@@ -98,6 +128,7 @@ typedef enum
     MFX_WRN_VALUE_NOT_CHANGED           = 6,      /* the value is saturated based on its valid range */
     MFX_WRN_OUT_OF_RANGE                = 7,      /* the value is out of valid range */
     MFX_WRN_FILTER_SKIPPED              = 10,     /* one of requested filters has been skipped */
+    MFX_WRN_INCOMPATIBLE_AUDIO_PARAM    = 11,    /* incompatible audio parameters */
 
     /* threading statuses */
     MFX_TASK_DONE = MFX_ERR_NONE, /* task has been completed */
