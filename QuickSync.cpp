@@ -1361,12 +1361,15 @@ void CQuickSync::CopyFrame(mfxFrameSurface1* pSurface, QsFrameData& outFrameData
     size_t height = pSurface->Info.CropH; // Cropped image height
     size_t pitch  = frameData.Pitch;      // Image line + padding in bytes --> set by the driver
 
-    if (m_pDecoder->IsD3D11Alloc())
+    if (m_pDecoder->IsD3D11Alloc() || !m_pDecoder->IsD3DAlloc())
     {
         outFrameData.y = frameData.Y + (pSurface->Info.CropY * pitch), height * pitch;
         outFrameData.u = frameData.CbCr + (pSurface->Info.CropY * pitch), pitch * height / 2;
         outFrameData.v = 0;
         outFrameData.a = 0;
+
+        // App can modify this buffer
+        outFrameData.bReadOnly = false;
     }
     else
     {
