@@ -117,7 +117,7 @@ bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
 
     // Check if frame rate has changed
     double tmpFrameRate;
-    if (CalcCurrentFrameRate(tmpFrameRate, frames.size()))
+    if (!m_bIvtc && CalcCurrentFrameRate(tmpFrameRate, frames.size()))
     {
         FixFrameRate(tmpFrameRate);
     }
@@ -225,10 +225,10 @@ bool CDecTimeManager::GetSampleTimeStamp(const TFrameVector& frames,
             auto it = m_OutputTimeStamps.begin();
             if (it != m_OutputTimeStamps.end())
             {
-                REFERENCE_TIME rtTemp = *(it);
+                REFERENCE_TIME rtTemp = *it;
 
                 // Check if the lowest timetamp is very far (100ms) than the expected timestamp
-                if (abs(rtTemp - rtStart) > 1000000)
+                if (!m_bIvtc && abs(rtTemp - rtStart) > 1000000)
                 {
                     MSDK_TRACE("QsDecoder: Warning detected long time stamp gap!\n");
                     rtStart = rtTemp;
