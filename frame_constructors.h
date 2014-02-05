@@ -31,7 +31,7 @@
 class CFrameConstructor
 {
 public:
-    CFrameConstructor();
+    CFrameConstructor(CDecTimeManager* tsManager);
     virtual ~CFrameConstructor();
     virtual mfxStatus ConstructHeaders(VIDEOINFOHEADER2* vih, const GUID& guidFormat, size_t nMtSize, size_t nVideoInfoSize);
     virtual mfxStatus ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS);
@@ -41,12 +41,13 @@ public:
     void SetDvdPacketStripping(bool stripPackets) { m_bDvdStripPackets = stripPackets; }
 
 protected:
-    static void UpdateTimeStamp(IMediaSample* pSample, mfxBitstream* pBS);
+    inline void UpdateTimeStamp(IMediaSample* pSample, mfxBitstream* pBS);
     inline void WriteResidualData(mfxU8*& pData);
     inline void WriteHeaders(mfxU8*& pData);
     inline void WriteSampleData(mfxU8*& pData, const mfxU8* pSrc, size_t nDataSize);
-    static void CFrameConstructor::StripDvdPacket(BYTE*& p, int& len);
+    static void StripDvdPacket(BYTE*& p, int& len);
 
+    CDecTimeManager* m_TimeManager;
     bool m_bSeqHeaderInserted;
     bool m_bDvdStripPackets;
     mfxBitstream m_Headers; 
@@ -58,7 +59,7 @@ protected:
 class CVC1FrameConstructor : public CFrameConstructor
 {
 public:    
-    CVC1FrameConstructor();
+    CVC1FrameConstructor(CDecTimeManager* tsManager);
     mfxStatus ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS);
     mfxStatus ConstructHeaders(VIDEOINFOHEADER2* vih, const GUID& guidFormat, size_t nMtSize, size_t nVideoInfoSize);
 
@@ -75,7 +76,7 @@ protected:
 class CAVCFrameConstructor : public CFrameConstructor
 {
 public:
-    CAVCFrameConstructor();
+    CAVCFrameConstructor(CDecTimeManager* tsManager);
     ~CAVCFrameConstructor();
     mfxStatus ConstructFrame(IMediaSample* pSample, mfxBitstream* pBS);
     mfxStatus ConstructHeaders(VIDEOINFOHEADER2* vih,

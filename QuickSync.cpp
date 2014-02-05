@@ -160,7 +160,7 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
             return VFW_E_INVALIDMEDIATYPE;
 
         videoParams.mfx.CodecId = MFX_CODEC_MPEG2;
-        pFrameConstructor = new CFrameConstructor;
+        pFrameConstructor = new CFrameConstructor(&m_TimeManager);
     }    
     // VC1 or WMV3
     else if ((fourCC == FOURCC_VC1) || (fourCC == FOURCC_WMV3))
@@ -184,7 +184,7 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
             return VFW_E_INVALIDMEDIATYPE;
         }
 
-        pFrameConstructor = new CVC1FrameConstructor();
+        pFrameConstructor = new CVC1FrameConstructor(&m_TimeManager);
     }
     // H264
     else if ((fourCC == FOURCC_H264) || (fourCC == FOURCC_X264) || (fourCC == FOURCC_h264) ||
@@ -196,10 +196,10 @@ HRESULT CQuickSync::HandleSubType(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC, mfxV
 
         videoParams.mfx.CodecId = MFX_CODEC_AVC;
         // Note: CAVCFrameConstructor can handle both H264 stream types but it can't handle fragment streams (e.g. live TV)
-//        pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
-//            new CAVCFrameConstructor :
-//            new CFrameConstructor;
-        pFrameConstructor = new CAVCFrameConstructor;
+        pFrameConstructor = ((fourCC == FOURCC_avc1) || (fourCC == FOURCC_AVC1) || (fourCC == FOURCC_CCV1)) ?
+            new CAVCFrameConstructor(&m_TimeManager) :
+            new CFrameConstructor(&m_TimeManager);
+//        pFrameConstructor = new CAVCFrameConstructor(&m_TimeManager);
     }
     else
     {
@@ -551,6 +551,8 @@ HRESULT CQuickSync::InitDecoder(const AM_MEDIA_TYPE* mtIn, FOURCC fourCC)
         m_pDecoder->SetAuxFramesCount(surfaceCount);
     }
 
+    m_TimeManager.Enabled() = m_Config.bTimeStampCorrection;
+
     _snprintf_s(m_CodecName, MSDK_ARRAY_LEN(m_CodecName), MSDK_ARRAY_LEN(m_CodecName)-1,
         "Intel\xae QuickSync Decoder (%s) - %s",
         ::GetCodecName(m_DecVideoParams.mfx.CodecId),
@@ -828,7 +830,7 @@ void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData:
         QsFrameData::fsProgressiveFrame :
         QsFrameData::fsInterlacedFrame;
 
-    if (m_Config.bTimeStampCorrection && m_TimeManager.GetInverseTelecine())
+    if (m_TimeManager.GetInverseTelecine())
     {
         flags = AM_VIDEO_FLAG_WEAVE;
         return;
@@ -989,6 +991,11 @@ HRESULT CQuickSync::OnSeek(REFERENCE_TIME /* segmentStart */)
 
 bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStart)
 {
+    if (!m_TimeManager.Enabled()) {
+        rtStart = pSurface->Data.TimeStamp; 
+        return true; // Return all frames DS filter will handle this
+    }
+
     TFrameVector frames;
     frames.push_back(pSurface);
     auto queue = m_pDecoder->GetOutputQueue();
@@ -998,14 +1005,7 @@ bool CQuickSync::SetTimeStamp(mfxFrameSurface1* pSurface, REFERENCE_TIME& rtStar
     bool rc = m_TimeManager.GetSampleTimeStamp(frames, rtStart);
 
     // Return corrected time stamp
-    if (m_Config.bTimeStampCorrection)
-    {
         return rc && rtStart >= 0;
-    }
-
-    // Just convert the time stamp from the HW decoder
-    rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pSurface->Data.TimeStamp);
-    return true; // Return all frames DS filter will handle this
 }
 
 mfxStatus CQuickSync::OnVideoParamsChanged()
@@ -1146,7 +1146,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
     {
         // Initial frames with invalid times are discarded
         REFERENCE_TIME rtStart = m_TimeManager.ConvertMFXTime2ReferenceTime(pOutSurface->Data.TimeStamp);
-        if (m_pDecoder->OutputQueueEmpty() && rtStart == INVALID_REFTIME && m_Config.bTimeStampCorrection)
+        if (m_TimeManager.Enabled() && m_pDecoder->OutputQueueEmpty() && !m_TimeManager.IsValidTimeStamp(rtStart))
         {
             m_pDecoder->UnlockSurface(pOutSurface);
             return S_OK;
@@ -1291,7 +1291,7 @@ HRESULT CQuickSync::ProcessDecodedFrame(mfxFrameSurface1* pOutSurface)
         // Check time stamp, interpolate newly created frames
         if (MFX_ERR_MORE_SURFACE == sts && m_Config.bVppEnableDITimeStampsInterpolation)
         {
-            if (pOutSurface->Data.TimeStamp == MFX_TIME_STAMP_INVALID && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
+            if (m_TimeManager.IsValidTimeStamp(pOutSurface->Data.TimeStamp) && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
             {
                 REFERENCE_TIME rtNewStart = (MFX_ERR_MORE_SURFACE == sts) ? rtPrevStart : m_TimeManager.GetLastTimeStamp();                    
                 rtNewStart += (REFERENCE_TIME)(0.5 + 1e7 * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);
@@ -1436,7 +1436,7 @@ void CQuickSync::FlushVPP()
         // Check time stamp, interpolate newly created frames
         if (m_Config.bVppEnableDITimeStampsInterpolation)
         {
-            if (pOutSurface->Data.TimeStamp == MFX_TIME_STAMP_INVALID && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
+            if (m_TimeManager.IsValidTimeStamp(pOutSurface->Data.TimeStamp) && m_Config.bVppEnableFullRateDI && pOutSurface->Info.FrameRateExtN > 0)
             {
                 REFERENCE_TIME rtNewStart = rtPrevStart;
                 rtNewStart += (REFERENCE_TIME)(0.5 + (double)(++count) * 1e7 * (double)pOutSurface->Info.FrameRateExtD / (double)pOutSurface->Info.FrameRateExtN);

@@ -52,7 +52,7 @@ typedef std::vector<mfxFrameSurface1*> TFrameVector;
 class CDecTimeManager
 {
 public:
-    CDecTimeManager(bool bEnableIvtc = true) : m_dOrigFrameRate(0), m_dFrameRate(0), m_bIvtc(false), m_bEnableIvtc(bEnableIvtc)
+    CDecTimeManager(bool bEnableIvtc = true) : m_dOrigFrameRate(0), m_dFrameRate(0), m_bIvtc(false), m_bEnableIvtc(bEnableIvtc), m_bEnabled(true)
     {
         Reset();
     }
@@ -74,21 +74,31 @@ public:
         MSDK_TRACE("QsDecoder: frame rate is %0.2f\n", (float)(m_dFrameRate));
     }
 
+    bool& Enabled() { return m_bEnabled; }
     void Reset();
     void SetInverseTelecine(bool bIvtc);
-    inline bool GetInverseTelecine() { return m_bIvtc; }
+    inline bool GetInverseTelecine() { return Enabled() && m_bIvtc; }
     inline bool HasValidFrameRate() { return m_bValidFrameRate || m_dFrameRate == 0; }
 
-    static mfxU64 ConvertReferenceTime2MFXTime(REFERENCE_TIME rtTime)
+    bool IsValidTimeStamp(REFERENCE_TIME rtTime)
     {
+        return (Enabled()) ? rtTime != MFX_TIME_STAMP_INVALID : rtTime != INVALID_REFTIME;
+    }
+
+    mfxU64 ConvertReferenceTime2MFXTime(REFERENCE_TIME rtTime)
+    {
+        if (!Enabled()) return (mfxU64)rtTime;
+
         if (-1e7 == rtTime || INVALID_REFTIME == rtTime)
             return MFX_TIME_STAMP_INVALID;
 
         return (mfxU64)(((double)rtTime / 1e7) * (double)MFX_TIME_STAMP_FREQUENCY);
     }
 
-    static REFERENCE_TIME ConvertMFXTime2ReferenceTime(mfxU64 nTime)
+    REFERENCE_TIME ConvertMFXTime2ReferenceTime(mfxU64 nTime)
     {
+        if (!Enabled()) return (REFERENCE_TIME)nTime;
+
         if (MFX_TIME_STAMP_INVALID == nTime)
             return (REFERENCE_TIME)INVALID_REFTIME;
 
@@ -115,6 +125,7 @@ protected:
     void FixFrameRate(double frameRate);
     bool CalcCurrentFrameRate(double& frameRate, size_t nQueuedFrames);
 
+    bool   m_bEnabled;
     double m_dOrigFrameRate;
     double m_dFrameRate;
     bool   m_bValidFrameRate;

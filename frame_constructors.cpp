@@ -54,8 +54,10 @@ static inline void SetValue(mfxU32 nValue, mfxU8* pBuf)
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                      CFrameConstructor
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-CFrameConstructor::CFrameConstructor() 
+CFrameConstructor::CFrameConstructor(CDecTimeManager* tsManager) 
 {
+    ASSERT(tsManager != NULL);
+    m_TimeManager = tsManager;
     m_bSeqHeaderInserted = false;
     m_bDvdStripPackets = false;
     MSDK_ZERO_VAR(m_ResidialBS);
@@ -80,9 +82,10 @@ void CFrameConstructor::UpdateTimeStamp(IMediaSample* pSample, mfxBitstream* pBS
 {
     REFERENCE_TIME rtStart, rtEnd;
     HRESULT hr = pSample->GetTime(&rtStart, &rtEnd);
-    pBS->TimeStamp = (S_OK == hr || VFW_S_NO_STOP_TIME == hr) ?
-         CDecTimeManager::ConvertReferenceTime2MFXTime(rtStart) :
-         MFX_TIME_STAMP_INVALID;         
+    if (!(S_OK == hr || VFW_S_NO_STOP_TIME == hr))
+        rtStart = INVALID_REFTIME;
+
+    pBS->TimeStamp =  m_TimeManager->ConvertReferenceTime2MFXTime(rtStart);
 }
 
 void CFrameConstructor::SaveResidualData(mfxBitstream* pBS)
@@ -318,8 +321,8 @@ void CFrameConstructor::WriteSampleData(mfxU8*& pData, const mfxU8* pSrc, size_t
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                      CVC1FrameConstructor
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-CVC1FrameConstructor::CVC1FrameConstructor() :
-    m_FourCC(0), m_Width(0), m_Height(0)
+CVC1FrameConstructor::CVC1FrameConstructor(CDecTimeManager* tsManager) :
+    CFrameConstructor(tsManager), m_FourCC(0), m_Width(0), m_Height(0)
 {
 }
 
@@ -473,7 +476,7 @@ bool CVC1FrameConstructor::StartCodeExist(mfxU8* pStart)
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                      CAVCFrameConstructor
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-CAVCFrameConstructor::CAVCFrameConstructor()
+CAVCFrameConstructor::CAVCFrameConstructor(CDecTimeManager* tsManager) : CFrameConstructor(tsManager)
 {
     m_HeaderNalSize = 2;  //MSDN - MPEG2VideoInfo->dwSequenceHeader delimited by 2 byte length fields
     m_NalSize = 0;
