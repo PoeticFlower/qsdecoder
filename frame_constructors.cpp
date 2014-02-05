@@ -85,6 +85,7 @@ void CFrameConstructor::UpdateTimeStamp(IMediaSample* pSample, mfxBitstream* pBS
     if (!(S_OK == hr || VFW_S_NO_STOP_TIME == hr))
         rtStart = INVALID_REFTIME;
 
+    MSDK_VTRACE("QsDecoder: Input time stamp (%I64d)\n", rtStart);
     pBS->TimeStamp =  m_TimeManager->ConvertReferenceTime2MFXTime(rtStart);
 }
 
