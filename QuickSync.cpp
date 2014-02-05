@@ -837,7 +837,7 @@ void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData:
     }
 
     // Progressive frame - note that sometimes interlaced content has the MFX_PICSTRUCT_PROGRESSIVE in combination with other flags
-    // Frame doubling/trpling implies progressive source
+    // Frame doubling/tripling implies progressive source
     if (picStruct == MFX_PICSTRUCT_PROGRESSIVE || picStruct & MFX_PICSTRUCT_FRAME_DOUBLING || picStruct & MFX_PICSTRUCT_FRAME_TRIPLING)
     {
         flags = AM_VIDEO_FLAG_WEAVE;
@@ -851,6 +851,12 @@ void CQuickSync::PicStructToDsFlags(mfxU32 picStruct, DWORD& flags, QsFrameData:
     if (picStruct & MFX_PICSTRUCT_FIELD_TFF)
     {
         flags |= AM_VIDEO_FLAG_FIELD1FIRST;
+    }
+
+    // frame is progressive.
+    if (picStruct & MFX_PICSTRUCT_PROGRESSIVE)
+    {
+        flags |= AM_VIDEO_FLAG_WEAVE;
     }
 
     // Telecine flag
