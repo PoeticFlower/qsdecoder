@@ -1,6 +1,6 @@
 /******************************************************************************* *\
 
-Copyright (C) 2007-2013 Intel Corporation.  All rights reserved.
+Copyright (C) 2007-2014 Intel Corporation.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -38,6 +38,16 @@ extern "C"
 {
 #endif /* __cplusplus */
 
+typedef struct {
+    mfxU8  Data[16];
+} mfxPluginUID;
+
+static const mfxPluginUID  MFX_PLUGINID_HEVCD_SW     = {{0x15, 0xdd, 0x93, 0x68, 0x25, 0xad, 0x47, 0x5e, 0xa3, 0x4e, 0x35, 0xf3, 0xf5, 0x42, 0x17, 0xa6}};
+static const mfxPluginUID  MFX_PLUGINID_HEVCD_HW     = {{0x33, 0xa6, 0x1c, 0x0b, 0x4c, 0x27, 0x45, 0x4c, 0xa8, 0xd8, 0x5d, 0xde, 0x75, 0x7c, 0x6f, 0x8e}};
+static const mfxPluginUID  MFX_PLUGINID_HEVCE_SW     = {{0x2f, 0xca, 0x99, 0x74, 0x9f, 0xdb, 0x49, 0xae, 0xb1, 0x21, 0xa5, 0xb6, 0x3e, 0xf5, 0x68, 0xf7}};
+static const mfxPluginUID  MFX_PLUGINID_VP8D_HW      = {{0xf6, 0x22, 0x39, 0x4d, 0x8d, 0x87, 0x45, 0x2f, 0x87, 0x8c, 0x51, 0xf2, 0xfc, 0x9b, 0x41, 0x31}};
+static const mfxPluginUID  MFX_PLUGINID_CAMERA_HW    = {{0x54, 0x54, 0x26, 0x16, 0x24, 0x33, 0x41, 0xe6, 0x93, 0xae, 0x89, 0x99, 0x42, 0xce, 0x73, 0x55}};
+
 typedef enum {
     MFX_PLUGINTYPE_VIDEO_GENERAL   = 0,
     MFX_PLUGINTYPE_VIDEO_DECODE    = 1,
@@ -49,10 +59,6 @@ typedef enum {
     MFX_THREADPOLICY_SERIAL    = 0,
     MFX_THREADPOLICY_PARALLEL    = 1
 } mfxThreadPolicy;
-
-typedef struct {
-    mfxU8  Data[16];
-} mfxPluginUID;
 
 typedef struct mfxPluginParam {
     mfxU32  reserved[6];
