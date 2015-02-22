@@ -28,6 +28,8 @@
     #pragma warning(disable: 4995)
 #endif
 
+#pragma warning(push)
+#pragma warning(disable: 4996)
 #include <d3d9.h>
 #include <d3d11.h>
 #include <dshow.h>
@@ -35,9 +37,12 @@
 #include <initguid.h>
 #include <atlbase.h>
 #include <dxva2api.h>
+#pragma warning(pop)
+
 #if MFX_D3D11_SUPPORT
     #include <dxgi1_2.h>
 #endif
+
 // Intel Media SDK
 #include <mfxvideo++.h>
 
