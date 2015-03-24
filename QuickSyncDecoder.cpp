@@ -419,9 +419,10 @@ mfxStatus CQuickSyncDecoder::DecodeHeader(mfxBitstream* bs, mfxVideoParam* par)
     {
         mfxBitstream bs2 = *bs;
         
+        bs2.DataOffset = 0;
         bs2.Data = new mfxU8[bs->DataLength + 5];
-        memcpy(bs2.Data, bs->Data + bs->DataOffset, bs->DataLength - bs->DataOffset);
-        bs2.MaxLength = bs2.DataLength = bs->DataLength + 5 - bs->DataOffset;
+        memcpy(bs2.Data, bs->Data + bs->DataOffset, bs->DataLength);
+        bs2.MaxLength = bs2.DataLength = bs->DataLength + 5;
 
         // Write H264 start code + start of splice section
         *((unsigned*)(bs2.Data + bs2.DataLength - 5)) = 0x01000000;
