@@ -1,6 +1,6 @@
 /*******************************************************************************
 
-Copyright (C) 2013 Intel Corporation.  All rights reserved.
+Copyright (C) 2013-2014 Intel Corporation.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -31,7 +31,9 @@ File Name: mfxcommon.h
 #define __MFXCOMMON_H__
 #include "mfxdefs.h"
 
+#if !defined (__GNUC__)
 #pragma warning(disable: 4201)
+#endif
 
 #ifdef __cplusplus
 extern "C"
@@ -59,6 +61,7 @@ enum  {
     MFX_IMPL_HARDWARE2    = 0x0005,  /* Hardware accelerated implementation (2nd device) */
     MFX_IMPL_HARDWARE3    = 0x0006,  /* Hardware accelerated implementation (3rd device) */
     MFX_IMPL_HARDWARE4    = 0x0007,  /* Hardware accelerated implementation (4th device) */
+    MFX_IMPL_RUNTIME      = 0x0008, 
 
     MFX_IMPL_VIA_ANY      = 0x0100,
     MFX_IMPL_VIA_D3D9     = 0x0200,
@@ -66,7 +69,7 @@ enum  {
     MFX_IMPL_VIA_VAAPI    = 0x0400,
 
     MFX_IMPL_AUDIO        = 0x8000,
-
+     
     MFX_IMPL_UNSUPPORTED  = 0x0000  /* One of the MFXQueryIMPL returns */
 };
 
@@ -112,6 +115,33 @@ typedef struct {
 } mfxBitstream;
 
 typedef struct _mfxSyncPoint *mfxSyncPoint;
+
+typedef struct {
+    mfxIMPL     Implementation;
+    mfxVersion  Version;
+    mfxU16      ExternalThreads;
+    union {
+        struct {
+            mfxExtBuffer **ExtParam;
+            mfxU16  NumExtParam;
+        };
+        mfxU16  reserved2[5];
+    };
+    mfxU16      reserved[22];
+} mfxInitParam;
+
+enum {
+    MFX_EXTBUFF_THREADS_PARAM = MFX_MAKEFOURCC('T','H','D','P')
+};
+
+typedef struct {
+    mfxExtBuffer Header;
+
+    mfxU16       NumThread;
+    mfxI32       SchedulingType;
+    mfxI32       Priority;
+    mfxU16       reserved[55];
+} mfxExtThreadsParam;
 
 #ifdef __cplusplus
 }

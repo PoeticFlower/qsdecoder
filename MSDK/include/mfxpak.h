@@ -1,6 +1,6 @@
 /******************************************************************************* *\
 
-Copyright (C) 2010-2013 Intel Corporation.  All rights reserved.
+Copyright (C) 2014 Intel Corporation.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -24,84 +24,55 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-File Name: mfxjpeg.h
+File Name: mfxpak.h
 
 *******************************************************************************/
-#ifndef __MFX_JPEG_H__
-#define __MFX_JPEG_H__
-
+#ifndef __MFXPAK_H__
+#define __MFXPAK_H__
 #include "mfxdefs.h"
+#include "mfxvstructures.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif /* __cplusplus */
 
-/* CodecId */
-enum {
-    MFX_CODEC_JPEG    = MFX_MAKEFOURCC('J','P','E','G')
-};
+typedef struct {
+    mfxU32  reserved[32];
 
-/* CodecProfile, CodecLevel */
-enum
-{
-    MFX_PROFILE_JPEG_BASELINE      = 1
-};
+    mfxFrameSurface1 *InSurface;
 
-enum
-{
-    MFX_ROTATION_0      = 0,
-    MFX_ROTATION_90     = 1,
-    MFX_ROTATION_180    = 2,
-    MFX_ROTATION_270    = 3
-};
+    mfxU16  NumFrameL0;
+    mfxFrameSurface1 **L0Surface;
+    mfxU16  NumFrameL1;
+    mfxFrameSurface1 **L1Surface;
 
-enum {
-    MFX_EXTBUFF_JPEG_QT     =   MFX_MAKEFOURCC('J','P','G','Q'),
-    MFX_EXTBUFF_JPEG_HUFFMAN     =   MFX_MAKEFOURCC('J','P','G','H')
-};
-
-enum {
-    MFX_JPEG_COLORFORMAT_UNKNOWN = 0,
-    MFX_JPEG_COLORFORMAT_YCbCr = 1,
-    MFX_JPEG_COLORFORMAT_RGB = 2
-};
-
-enum {
-    MFX_SCANTYPE_UNKNOWN = 0,
-    MFX_SCANTYPE_INTERLEAVED = 1,
-    MFX_SCANTYPE_NONINTERLEAVED = 2
-};
+    mfxU16  NumExtParam;
+    mfxExtBuffer    **ExtParam;
+} mfxPAKInput;
 
 typedef struct {
-    mfxExtBuffer    Header;
+    mfxBitstream     *Bs; 
 
-    mfxU16  reserved[7];
-    mfxU16  NumTable;
+    mfxFrameSurface1 *OutSurface;
 
-    mfxU16    Qm[4][64];
-} mfxExtJPEGQuantTables;
+    mfxU16            NumExtParam;
+    mfxExtBuffer    **ExtParam;
+} mfxPAKOutput;
 
-typedef struct {
-    mfxExtBuffer    Header;
+typedef struct _mfxSession *mfxSession;
+mfxStatus MFX_CDECL MFXVideoPAK_Query(mfxSession session, mfxVideoParam *in, mfxVideoParam *out);
+mfxStatus MFX_CDECL MFXVideoPAK_QueryIOSurf(mfxSession session, mfxVideoParam *par, mfxFrameAllocRequest *request);
+mfxStatus MFX_CDECL MFXVideoPAK_Init(mfxSession session, mfxVideoParam *par);
+mfxStatus MFX_CDECL MFXVideoPAK_Reset(mfxSession session, mfxVideoParam *par);
+mfxStatus MFX_CDECL MFXVideoPAK_Close(mfxSession session);
 
-    mfxU16  reserved[2];
-    mfxU16  NumDCTable;
-    mfxU16  NumACTable;
+mfxStatus MFX_CDECL MFXVideoPAK_ProcessFrameAsync(mfxSession session, mfxPAKInput *in, mfxPAKOutput *out,  mfxSyncPoint *syncp);
 
-    struct {
-        mfxU8   Bits[16];
-        mfxU8   Values[12];
-    } DCTables[4];
-
-    struct {
-        mfxU8   Bits[16];
-        mfxU8   Values[162];
-    } ACTables[4];
-} mfxExtJPEGHuffmanTables;
 
 #ifdef __cplusplus
 } // extern "C"
 #endif /* __cplusplus */
 
-#endif // __MFX_JPEG_H__
+
+#endif
