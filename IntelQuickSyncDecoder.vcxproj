@@ -31,6 +31,9 @@
   <PropertyGroup Label="Configuration" Condition="'$(VisualStudioVersion)' == '14.0'">
     <PlatformToolset>v140_xp</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(VisualStudioVersion)' == '15.0'">
+    <PlatformToolset>v141_xp</PlatformToolset>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
@@ -118,7 +121,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <MinimalRebuild>false</MinimalRebuild>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -127,11 +130,11 @@
       <ModuleDefinitionFile>IntelQuickSyncDecoder.def</ModuleDefinitionFile>
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '12.0'">%(AdditionalDependencies);libmfx_vs12d.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0'">%(AdditionalDependencies);libmfx_vs14d.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0' or '$(VisualStudioVersion)' == '15.0'">%(AdditionalDependencies);libmfx_vs14d.lib</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
       <AdditionalOptions>/IGNORE:4099 %(AdditionalOptions)</AdditionalOptions>
     </Link>
@@ -152,7 +155,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -160,10 +163,10 @@
       <ModuleDefinitionFile>IntelQuickSyncDecoder.def</ModuleDefinitionFile>
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '12.0'">%(AdditionalDependencies);libmfx_vs12d.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0'">%(AdditionalDependencies);libmfx_vs14d.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0' or '$(VisualStudioVersion)' == '15.0'">%(AdditionalDependencies);libmfx_vs14d.lib</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>LIBCMT.lib</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib\x64;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
       <AdditionalOptions>/IGNORE:4099 %(AdditionalOptions)</AdditionalOptions>
     </Link>
@@ -179,7 +182,7 @@
       </DisableSpecificWarnings>
       <WarningLevel>Level4</WarningLevel>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -196,9 +199,9 @@
       <ModuleDefinitionFile>IntelQuickSyncDecoder.def</ModuleDefinitionFile>
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '12.0'">%(AdditionalDependencies);libmfx_vs12.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0'">%(AdditionalDependencies);libmfx_vs14.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0' or '$(VisualStudioVersion)' == '15.0'">%(AdditionalDependencies);libmfx_vs14.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <OptimizeReferences>true</OptimizeReferences>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
@@ -224,7 +227,7 @@
       </DisableSpecificWarnings>
       <WarningLevel>Level4</WarningLevel>
       <AdditionalIncludeDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Include;$(INTELMEDIASDK_WINSDK_PATH)\Include\um;$(INTELMEDIASDK_WINSDK_PATH)\Include\shared;MSDK\include</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)Include;$(WindowsSDK80Path)Include\um;$(WindowsSDK80Path)Include\shared;MSDK\include</AdditionalIncludeDirectories>
       <Optimization>Full</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -241,9 +244,9 @@
       <ModuleDefinitionFile>IntelQuickSyncDecoder.def</ModuleDefinitionFile>
       <AdditionalDependencies>winmm.lib;uuid.lib;D3D9.lib;Dxva2.lib;strmiids.lib;d3d11.lib;dxgi.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '12.0'">%(AdditionalDependencies);libmfx_vs12.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0'">%(AdditionalDependencies);libmfx_vs14.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(VisualStudioVersion)' == '14.0' or '$(VisualStudioVersion)' == '15.0'">%(AdditionalDependencies);libmfx_vs14.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(INTELMEDIASDK_WINSDK_PATH)\Lib\x64;$(INTELMEDIASDK_WINSDK_PATH)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(VisualStudioVersion)' == '12.0' Or '$(VisualStudioVersion)' == '14.0' Or '$(VisualStudioVersion)' == '15.0'">$(WindowsSDK80Path)\Lib;$(WindowsSDK80Path)\Lib\win8\um\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
